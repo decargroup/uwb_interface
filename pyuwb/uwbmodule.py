@@ -1,4 +1,3 @@
-from pdb import runeval
 import serial 
 
 class UwbModule(object):
@@ -53,6 +52,7 @@ class UwbModule(object):
             return isinstance(field, bool)
         if specifier == "I":
             return isinstance(field, int) and field >= 0
+            # TODO: add the remaining datatypes as needed
 
     def _serial_exchange(self, msg):
         """
@@ -111,6 +111,9 @@ class UwbModule(object):
                 results.append(float(value))
             elif format[i] == "?":
                 results.append(bool(value))
+            elif format[i] == "s":
+                results.append(str(value))
+                # TODO: add the remaining datatypes as needed
             else: 
                 raise RuntimeError("unsupported format type.")
         return results

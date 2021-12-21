@@ -44,4 +44,4 @@ def test_do_twr():
 
 
 if __name__ == "__main__":
-    test_get_id()
+    test_do_twr()
