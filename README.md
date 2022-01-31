@@ -2,6 +2,17 @@
 
 This python package provides a basic API to UWB modules, allowing a user to initiate and collect ranging data between devices, as well as data transfer and broadcast capabilities between UWB devices.
 
+# Installation
+Installation
+To install, cd into the repository directory (the one with setup.py) and run:
+
+    pip install .
+or
+
+    pip install -e .
+
+The -e flag tells pip to install the package in-place, which lets you make changes to the code without having to reinstall every time. Do not do this on shared workstations!
+
 ```python
 from pyuwb import UwbModule
 uwb = UwbModule("/dev/ttyUSB0")
@@ -32,6 +43,7 @@ https://docs.python.org/3/library/struct.html#format-characters
 
 |# | Example: Python | Example: message| Example: response|
 |--|--------|---------------------|------------------|
+|C00| `uwb.set_idle()`| `"C00\r"` | `"R00\r"` |
 |C01| `uwb.get_id()`| `"C01\r"`|`"R01,3\r"`
 |C02| `range_data = uwb.do_ranging(destination_id = 1)`| `"C02,1\r"`| `"R02,1.2345,98.1\r"`
 |
