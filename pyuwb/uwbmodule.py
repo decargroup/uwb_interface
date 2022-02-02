@@ -1,16 +1,21 @@
 import serial 
+from time import time, sleep
 
 class UwbModule(object):
     _encoding = "utf-8"
     _format_dict = {
+        "C00":"",
+        "R00":"",
         "C01":"",
-        "C02":"i",
-        "R01":"i",
-        "R02":"f"
+        "R01":"int",
+        "C02":"int,bool",
+        "R02":"float"
     }
-
+    _sep = ","
+    _eol = "\r"
     def __init__(self, port, baudrate = 19200, timeout = 1):
         self.device = serial.Serial(port, baudrate=baudrate, timeout = timeout)
+        self._eol_encoded = self._eol.encode(self._encoding)
 
     def __del__(self):
         """ 
@@ -23,7 +28,7 @@ class UwbModule(object):
         """ 
         Send an arbitrary string to the UWB device. 
         """
-        if type(message) == str:
+        if isinstance(message, str):
             message = message.encode(self._encoding)
         
         self.device.write(message)
@@ -32,8 +37,33 @@ class UwbModule(object):
         """ 
         Read arbitrary string from UWB device. 
         """
-        out = self.device.readline()
-        return out.decode(self._encoding)
+        out = self.device.readline() + self.device.read(self.device.in_waiting)
+        return out.decode(self._encoding, errors="replace")
+
+    def _wait_for_response(self, msg_key: str, max_attempts = 10):
+        """
+        
+        """
+        idx = -1
+        start_time = time()
+        for i in range(max_attempts):
+            out = self._read()
+            idx = out.find(msg_key)
+            if idx >= 0:
+                resp = out[idx:]
+                idx_end = resp.find(self._eol)
+                return resp[:idx_end]
+            sleep(0.001)
+        
+        raise RuntimeError("No valid response received.")
+        
+
+
+    def _extract_response(self, string: str, msg_key:str):
+        idx = string.find(msg_key)
+        string2 = string[idx:]
+        idx2 = string2.find(self._eol)
+        return string2[:idx2]
 
     def _check_message_format(self, msg_key, msg):
         pass
@@ -42,17 +72,17 @@ class UwbModule(object):
         """
         Checks to see if a particular field complies with its format specifier.
         """
-        if specifier == "i":
+        specifier = specifier.strip()
+        if specifier == "int":
             return isinstance(field, int)
-        if specifier == "f":
+        if specifier == "float":
             return isinstance(field, float)
-        if specifier == "s":
+        if specifier == "str":
             return isinstance(field, str)
-        if specifier == "?":
+        if specifier == "bool":
             return isinstance(field, bool)
-        if specifier == "I":
+        if specifier == "uint":
             return isinstance(field, int) and field >= 0
-            # TODO: add the remaining datatypes as needed
 
     def _serial_exchange(self, msg):
         """
@@ -64,24 +94,26 @@ class UwbModule(object):
             raise serial.SerialException("Didn't receive response from MCU.")
         return response
         
-    def _build_message(self, msg_key: str, fields: list = None):
+    def _build_message(self, msg_key: str, fieldvalues: list = None):
         """
         Constructs the message string and checks if the format is correct.
         """
-        # Check to see if all the fields match with the message format
-        for i, c in enumerate(self._format_dict[msg_key]):
-            if not self._check_field_format(c, fields[i]):
-                raise RuntimeError("Incorrect message format.")
+        # Check to see if all the fieldvalues match with the message format
+        if len(self._format_dict[msg_key]) > 0:
+            fieldtypes = self._format_dict[msg_key].split(",")
+            for i, t in enumerate(fieldtypes):
+                if not self._check_field_format(t, fieldvalues[i]):
+                    raise RuntimeError("Incorrect message format.")
 
         # Assemble the message
         msg = msg_key
-        format = self._format_dict["C01"]
-        if fields is not None:
+        if fieldvalues is not None:
             # Convert everything to strings
-            fields = [str(x) for x in fields]
+            # TODO: will need to add float_to_hex here.
+            fieldvalues = [str(x) for x in fieldvalues]
             # Join them all in a big string
-            if len(fields) > 0:
-                msg += ";" + ";".join(fields)
+            if len(fieldvalues) > 0:
+                msg += self._sep + self._sep.join(fieldvalues)
 
         msg += "\r"
         return msg
@@ -91,45 +123,65 @@ class UwbModule(object):
         if not isinstance(msg, str):
             msg = str(msg)
 
-        fields = msg.split(";")
-        format = self._format_dict[msg_key]
+        fields = msg.split(self._sep)
+        format = self._format_dict[msg_key].split(self._sep)
 
         received_key = fields[0]
         if msg_key is not None:
-            if received_key[0:3] != msg_key:
-                raise RuntimeError("Response is not what was expected!")
+            if received_key != msg_key:
+                #raise RuntimeError("Response is not what was expected!")
+                return False
 
         if len(fields)-1 != len(format):
-            raise RuntimeError("Received different amount of data than expected.")
+            #raise RuntimeError("Received different amount of data than expected.")
+            return False
 
         
         results = []
         for i, value in enumerate(fields[1:]):
-            if format[i] == "i":
+            if format[i] == "int":
                 results.append(int(value))
-            elif format[i] == "f":
+            elif format[i] == "float":
                 results.append(float(value))
-            elif format[i] == "?":
+            elif format[i] == "bool":
                 results.append(bool(value))
-            elif format[i] == "s":
+            elif format[i] == "str":
                 results.append(str(value))
                 # TODO: add the remaining datatypes as needed
             else: 
                 raise RuntimeError("unsupported format type.")
         return results
-    
+
+    def set_idle(self):
+        msg_key = "C00"
+        rsp_key = "R00"
+        msg = self._build_message(msg_key, None)
+        raw_response = self._serial_exchange(msg)
+        response = self._extract_response(raw_response, rsp_key)
+        parsed = self._parse_message(response, rsp_key) 
+
     def get_id(self):
         msg_key = "C01"
         rsp_key = "R01"
-        msg = self._build_message(msg_key, None)
-        response = self._serial_exchange(msg)
+        msg = self._build_message(msg_key, None) 
+        self._send(msg)
+        response = self._wait_for_response(rsp_key)
         parsed = self._parse_message(response, rsp_key)
-        return {"id":parsed[0]}
+        if parsed is False:
+            return {"id":-1, "is_valid":False}
+        else:
+            return {"id":parsed[0], "is_valid":True}
 
-    def do_twr(self, destination_id: int):
+    def do_twr(self, target_id = 1, meas_at_target = False):
         msg_key = "C02"
         rsp_key = "R02"
-        msg = self._build_message(msg_key, [destination_id]) 
-        response = self._serial_exchange(msg)
+        msg = self._build_message(msg_key, [target_id, meas_at_target]) 
+        self._send(msg)
+        response = self._wait_for_response(rsp_key)
         parsed = self._parse_message(response, rsp_key)
-        return {"range":parsed[0]}
+
+        if parsed is False:
+            return {"range":0.0, "is_valid":False}
+        else:
+            return {"range":parsed[0], "is_valid":True}
+
