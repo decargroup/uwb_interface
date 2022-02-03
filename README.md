@@ -17,7 +17,8 @@ which installs the package in-place, allowing you make changes to the code witho
 ```python
 from pyuwb import UwbModule
 uwb = UwbModule("/dev/ttyUSB0")
-uwb.broadcast("Hello EVERYONE!")
+range_data = uwb.do_twr(target_id=5)
+print(range_data["range"])
 ```
 
 ## Our USB serial message format
@@ -25,11 +26,11 @@ We adopt a command/response (or request/response) style where the PC (referred t
 
 Depending on the command, the actual message that is ultimately sent as a sequence of bytes, will differ in structure. Hence, for each difference command, there exists a predefined __message format specifier__. An example is 
 
-    C99 "sfi" 
+    C99 "string,float,int" 
 
-This says that command #99 will have a string field, followed by a float field, followed by an integer field, __all seperated by semicolons__ (entry 69/3B in the ASCII table). All messages are prefixed by the message ID, and terminated by `"\r"`. This lets the receiver know the message format. An example corresponding to the above is
+This says that command #99 will have a string field, followed by a float field, followed by an integer field, __all seperated by commas__. All messages are prefixed by the message ID, and terminated by `"\r"`. This lets the receiver know the message format. An example corresponding to the above is
 
-    "C99;hello;3.1415+00;420\r"
+    "C99,hello,1.123456,44\r"
 
 If an empty response is expected, the message specifier would be `R99 ""`, and a message would look like
 
@@ -39,12 +40,12 @@ An empty response is essentially just an acknowledgement that the message was re
 https://docs.python.org/3/library/struct.html#format-characters
 
 
-
+## Current list of commands
 
 
 |# | Example: Python | Example: message| Example: response|
 |--|--------|---------------------|------------------|
 |C00| `uwb.set_idle()`| `"C00\r"` | `"R00\r"` |
 |C01| `uwb.get_id()`| `"C01\r"`|`"R01,3\r"`
-|C02| `range_data = uwb.do_ranging(destination_id = 1)`| `"C02,1\r"`| `"R02,1.2345,98.1\r"`
+|C02| `range_data = uwb.do_twr(target_id = 1)`| `"C02,1\r"`| `"R02,1.2345\r"`
 |
