@@ -34,8 +34,14 @@ class UwbModule(object):
         "R00": "",
         "C01": "",
         "R01": "int",
-        "C02": "int,bool",
-        "R02": "float",
+        "C02": "",
+        "R02": "",
+        "C03": "",
+        "R03": "int",
+        "C04": "bool",
+        "R04": "",
+        "C05": "int,bool",
+        "R05": "float",
     }
     _sep = ","
     _eol = "\r"
@@ -174,6 +180,8 @@ class UwbModule(object):
             if received_key != msg_key:
                 # raise RuntimeError("Did not receive expected response key.")
                 return False
+            elif len(fields) == 1:
+                return True
 
         if len(fields) - 1 != len(format):
             # raise RuntimeError("Received different amount of data than expected.")
@@ -207,7 +215,7 @@ class UwbModule(object):
         raw_response = self._serial_exchange(msg)
         response = self._extract_response(raw_response, rsp_key)
         parsed = self._parse_message(response, rsp_key)
-        if parsed[0] == "":
+        if parsed is True:
             return True
         else:
             return False
@@ -239,6 +247,84 @@ class UwbModule(object):
             self.id = parsed[0]
             return {"id": parsed[0], "is_valid": True}
 
+    def reset(self):
+        """
+        Resets and re-enables the DW receiver.
+
+        RETURNS:
+        --------
+        bool: successfully received response
+        """
+        msg_key = "C02"
+        rsp_key = "R02"
+        msg = self._build_message(msg_key, None)
+        self._send(msg)
+        response = self._wait_for_response(rsp_key)
+        if response is False:
+            return False
+
+        parsed = self._parse_message(response, rsp_key)
+
+        if parsed is True:
+            return True
+        else:
+            return False
+
+    def do_tests(self):
+        """
+        Performs pre-determined tests to identify any faults with the board.
+
+        RETURNS:
+        --------
+        dict with fields:
+            errorID: int
+                ID associated with the error that occured.
+            is_valid: bool
+                whether the result is valid or some error occured
+        """
+        msg_key = "C03"
+        rsp_key = "R03"
+        msg = self._build_message(msg_key, None)
+        self._send(msg)
+        response = self._wait_for_response(rsp_key)
+        if response is False:
+            return {"errorID": -1, "is_valid": False}
+
+        parsed = self._parse_message(response, rsp_key)
+
+        if parsed is False:
+            return {"errorID": -1, "is_valid": False}
+        else:
+            return {"errorID": parsed[0], "is_valid": True}
+
+    def toggle_passive(self, toggle=0):
+        """
+        Toggles the passive listening or "eavesdropping" feature.
+
+        PARAMETERS:
+        -----------
+        toggle: bool
+            flag to turn on or off passive listening
+
+        RETURNS:
+        --------
+        bool: successfully received response
+        """
+        msg_key = "C04"
+        rsp_key = "R04"
+        msg = self._build_message(msg_key, [toggle])
+        self._send(msg)
+        response = self._wait_for_response(rsp_key)
+        if response is False:
+            return False
+
+        parsed = self._parse_message(response, rsp_key)
+
+        if parsed is True:
+            return True
+        else:
+            return False
+
     def do_twr(self, target_id=1, meas_at_target=False):
         """
         Performs Two-Way Ranging with a chosen target/destination tag.
@@ -258,8 +344,8 @@ class UwbModule(object):
             is_valid: bool
                 whether the result is valid or some error occured
         """
-        msg_key = "C02"
-        rsp_key = "R02"
+        msg_key = "C05"
+        rsp_key = "R05"
         msg = self._build_message(msg_key, [target_id, meas_at_target])
         self._send(msg)
         response = self._wait_for_response(rsp_key)
