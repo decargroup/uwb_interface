@@ -96,9 +96,7 @@ class UwbModule(object):
         """
 
         while not self._kill_monitor:
-            print("test")
             out = self._read()
-            print("test")
             if self.verbose:
                 print(out, end="")
 
@@ -115,16 +113,16 @@ class UwbModule(object):
                 # Extract all the messages and parse them
                 if len(msg_idxs) > 0:
                     for idx in msg_idxs:
-                        out = out[idx:]
-                        idx_end = out.find(self._eol)
-                        parsed_msg = self._parse_message(out[:idx_end])
+                        temp = out[idx:]
+                        idx_end = temp.find(self._eol)
+                        parsed_msg = self._parse_message(temp[:idx_end])
                         self._response_container[parsed_msg[0]] = parsed_msg
                         self._msg_queue.append(parsed_msg)
 
     def _cb_dispatcher(self):
         while not self._kill_monitor:
             if len(self._msg_queue) > 0:
-                parsed_msg = self._parse_message(self._msg_queue.pop(0))
+                parsed_msg = self._msg_queue.pop(0)
 
                 # Check if any callbacks are registered for this specific msg
                 if parsed_msg[0] in self._callbacks.keys():
@@ -254,28 +252,27 @@ class UwbModule(object):
             msg_key = received_key
 
         format = self._format_dict[msg_key].split(self._sep)
-        if received_key != msg_key:
-            # raise RuntimeError("Did not receive expected response key.")
-            return False
-        elif len(fields) == 1:
-            return True
-
-        if len(fields) - 1 != len(format):
-            # raise RuntimeError("Received different amount of data than expected.")
-            return False
-
         results = [received_key]
-        for i, value in enumerate(fields[1:]):
-            if format[i] == "int":
-                results.append(int(value))
-            elif format[i] == "float":
-                results.append(float(value))
-            elif format[i] == "bool":
-                results.append(bool(value))
-            elif format[i] == "str":
-                results.append(str(value))
+        if format[0] == "":
+            return results 
+
+        for i in range(len(format)):
+
+            if i+1 <= len(fields) - 1:
+                value = fields[i+1]
+                if format[i] == "int":
+                    results.append(int(value))
+                elif format[i] == "float":
+                    results.append(float(value))
+                elif format[i] == "bool":
+                    results.append(bool(value))
+                elif format[i] == "str":
+                    results.append(str(value))
+                else:
+                    raise RuntimeError("unsupported format type.")
             else:
-                raise RuntimeError("unsupported format type.")
+                results.append(None)
+
         return results
 
     def _execute_command(self, command_key, response_key, *args):
