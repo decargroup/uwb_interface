@@ -205,7 +205,7 @@ class UwbModule(object):
         if specifier == "bool":
             return isinstance(field, bool)
         if specifier == "uint":
-           return isinstance(field, int) and field >= 0
+            return isinstance(field, int) and field >= 0
 
     def _build_message(self, msg_key: str, fieldvalues: list = None):
         """
@@ -254,12 +254,12 @@ class UwbModule(object):
         format = self._format_dict[msg_key].split(self._sep)
         results = [received_key]
         if format[0] == "":
-            return results 
+            return results
 
         for i in range(len(format)):
 
-            if i+1 <= len(fields) - 1:
-                value = fields[i+1]
+            if i + 1 <= len(fields) - 1:
+                value = fields[i + 1]
                 if format[i] == "int":
                     results.append(int(value))
                 elif format[i] == "float":
