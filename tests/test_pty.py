@@ -109,6 +109,7 @@ def test_do_twr():
     assert response["range"] == 3.14159
     assert response["is_valid"] == True
 
+
 def test_twr_err1():
     device, client = pty.openpty()
     port = os.ttyname(client)
@@ -120,8 +121,6 @@ def test_twr_err1():
     assert response["is_valid"] == False
 
 
-
-
 """
 For the callback tests, we must define a dummy callback, which just sets a flag
 confirming that it was called. Since the callback is called in a seperate thread
@@ -130,36 +129,42 @@ thread and the main thread.
 """
 
 entered_cb1 = False
+
+
 def cb_range1(parsed_msg):
     global entered_cb1
     entered_cb1 = True
+
 
 def test_twr_callback():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
-    uwb.register_callback("R05",cb_range1)
+    uwb.register_callback("R05", cb_range1)
     test_string = "R05,3.14159\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     sleep(0.1)
     assert entered_cb1 == True
 
+
 entered_cb2 = False
+
+
 def cb_range2(parsed_msg):
     global entered_cb2
     entered_cb12 = True
+
 
 def test_twr_callback_unregister():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
-    uwb.register_callback("R05",cb_range2)
-    uwb.unregister_callback("R05",cb_range2)
+    uwb.register_callback("R05", cb_range2)
+    uwb.unregister_callback("R05", cb_range2)
     test_string = "R05,3.14159\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     sleep(0.1)
     assert entered_cb2 == False
-
 
 
 if __name__ == "__main__":

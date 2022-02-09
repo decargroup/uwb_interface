@@ -33,12 +33,12 @@ class UwbModule(object):
     -----------
     port: str
         path to port that the UWB device is connected to
-    baudrate: int 
+    baudrate: int
         baudrate for the serial connection with the UWB module
     timeout: float
         max amount of time, in seconds, to wait for a response to commands
     verbose: bool
-        if set to true, full serial output will be printed. 
+        if set to true, full serial output will be printed.
 
     """
 
@@ -84,8 +84,8 @@ class UwbModule(object):
 
     def close(self):
         """
-        Proper shutdown of this module. Note that even if the object does not 
-        exist anymore in the main thread, the two internal threads will 
+        Proper shutdown of this module. Note that even if the object does not
+        exist anymore in the main thread, the two internal threads will
         continue to exist unless this method is called.
         """
 
@@ -97,7 +97,7 @@ class UwbModule(object):
         """
         if isinstance(message, str):
             if self.verbose:
-                print(message)
+                print("<< " + message)
             message = message.encode(self._encoding)
         self.device.write(message)
 
@@ -113,7 +113,7 @@ class UwbModule(object):
         out = self.device.readline() + self.device.read(self.device.in_waiting)
         out = out.decode(self._encoding, errors="replace")
         if self.verbose:
-            print(out, end="")
+            print(">> " + out, end="")
         return out
 
     def _serial_monitor(self):
@@ -145,7 +145,8 @@ class UwbModule(object):
                             self._response_container[parsed_msg[0]] = parsed_msg
                             self._msg_queue.append(parsed_msg)
                         except:
-                            pass
+                            if self.verbose:
+                                print("Message parsing error occured.")
 
     def _cb_dispatcher(self):
         while not self._kill_monitor:
@@ -159,6 +160,7 @@ class UwbModule(object):
                         cb(*parsed_msg[1:])  # Execute the callback
             else:
                 sleep(0.001)  # To prevent high CPU usage
+                # TODO: look into threading events to avoid busywait
 
     def register_callback(self, msg_key, cb_function):
         """
@@ -235,10 +237,10 @@ class UwbModule(object):
 
     def _parse_message(self, msg, msg_key=None):
         """
-        Parses a pure string message into a list of values, where each value 
+        Parses a pure string message into a list of values, where each value
         is converted to the type as specified in _format_dict[msg_key]
 
-        If no msg_key is provided, it will automatically be detected as the 
+        If no msg_key is provided, it will automatically be detected as the
         first field in the message.
         """
 
@@ -257,7 +259,7 @@ class UwbModule(object):
 
         for i in range(len(format)):
             # This can potentially through errors if value is not convertible
-            # to say, a float. 
+            # to say, a float.
             if i + 1 <= len(fields) - 1:
                 value = fields[i + 1]
                 if format[i] == "int":

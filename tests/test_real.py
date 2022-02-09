@@ -2,6 +2,7 @@ from pyuwb.uwbmodule import UwbModule, find_uwb_serial_ports
 from itertools import combinations
 import pytest
 from time import sleep
+
 """ 
 These tests require a minimum of two modules physically connected
 to the computer.
@@ -18,6 +19,7 @@ def test_find_ports():
         data = uwb.get_id()
         assert data["is_valid"]
 
+
 def test_twr():
     ports = find_uwb_serial_ports()
     modules = [UwbModule(port, verbose=True) for port in ports]
@@ -29,6 +31,7 @@ def test_twr():
         range_data = uwb1.do_twr(target_id=neighbor_id)
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
+
 
 def test_twr_meas_at_target():
     ports = find_uwb_serial_ports()
@@ -47,8 +50,10 @@ def test_twr_meas_at_target():
 class DummyCallbackTracker(object):
     def __init__(self):
         self.num_called = 0
+
     def dummy_callback(self, *args):
         self.num_called += 1
+
 
 def test_twr_meas_at_target():
     ports = find_uwb_serial_ports()
@@ -60,8 +65,8 @@ def test_twr_meas_at_target():
     uwb2 = modules[1]
     neighbor_id = uwb2.get_id()["id"]
     tracker = DummyCallbackTracker()
-    uwb2.register_callback("R05", tracker.dummy_callback) 
-    
+    uwb2.register_callback("R05", tracker.dummy_callback)
+
     # TODO: message prefixes are not meant to be user-facing
     N = 10
     for i in range(N):
@@ -71,6 +76,7 @@ def test_twr_meas_at_target():
         sleep(0.01)
     sleep(0.1)
     assert tracker.num_called == 10
+
 
 if __name__ == "__main__":
     test_twr_meas_at_target()
