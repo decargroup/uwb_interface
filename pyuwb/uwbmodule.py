@@ -36,8 +36,7 @@ class UwbModule(object):
     baudrate: int 
         baudrate for the serial connection with the UWB module
     timeout: float
-        max amount of time, in seconds, to wait for a newline character from the 
-        uwb modules
+        max amount of time, in seconds, to wait for a response to commands
     verbose: bool
         if set to true, full serial output will be printed. 
 
@@ -69,8 +68,9 @@ class UwbModule(object):
         """
         Constructor
         """
-        self.device = serial.Serial(port, baudrate=baudrate, timeout=timeout)
+        self.device = serial.Serial(port, baudrate=baudrate, timeout=0.1)
         self.verbose = verbose
+        self.timeout = timeout
 
         # Start a seperate thread for serial port monitoring
         self._kill_monitor = False
@@ -83,6 +83,12 @@ class UwbModule(object):
         self._dispatcher_thread.start()
 
     def close(self):
+        """
+        Proper shutdown of this module. Note that even if the object does not 
+        exist anymore in the main thread, the two internal threads will 
+        continue to exist unless this method is called.
+        """
+
         self._kill_monitor = True
 
     def _send(self, message):
@@ -250,13 +256,13 @@ class UwbModule(object):
             return results
 
         for i in range(len(format)):
-
+            # This can potentially through errors if value is not convertible
+            # to say, a float. 
             if i + 1 <= len(fields) - 1:
                 value = fields[i + 1]
                 if format[i] == "int":
                     results.append(int(value))
                 elif format[i] == "float":
-                    # TODO: this can fail and cause the thread to exit
                     results.append(float(value))
                 elif format[i] == "bool":
                     results.append(bool(value))
@@ -273,11 +279,10 @@ class UwbModule(object):
         self._response_container[response_key] = None
         msg = self._build_message(command_key, args)
         self._send(msg)
-        timeout = 1
         start_time = time()
         while (
             self._response_container[response_key] is None
-            and (time() - start_time) < timeout
+            and (time() - start_time) < self.timeout
         ):
             # TODO: threading package has solutions to avoid this busy wait
             sleep(0.001)

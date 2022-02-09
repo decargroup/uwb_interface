@@ -109,8 +109,18 @@ def test_do_twr():
     assert response["range"] == 3.14159
     assert response["is_valid"] == True
 
-# TODO: add test where the USB message gets partially messed up. i.e. a float 
-# shows up with some letters in it
+def test_twr_err1():
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+    uwb = UwbModule(port, timeout=1, verbose=True)
+    test_string = "R05,3.14159abc\r\n"
+    os.write(device, test_string.encode(uwb._encoding))
+    response = uwb.do_twr(target_id=1)
+    assert response["range"] == 0.0
+    assert response["is_valid"] == False
+
+
+
 
 """
 For the callback tests, we must define a dummy callback, which just sets a flag
