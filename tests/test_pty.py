@@ -109,6 +109,8 @@ def test_do_twr():
     assert response["range"] == 3.14159
     assert response["is_valid"] == True
 
+# TODO: add test where the USB message gets partially messed up. i.e. a float 
+# shows up with some letters in it
 
 """
 For the callback tests, we must define a dummy callback, which just sets a flag

@@ -18,9 +18,10 @@ def test_find_ports():
 
 def test_twr():
     ports = find_uwb_serial_ports()
-    modules = [UwbModule(port) for port in ports]
+    modules = [UwbModule(port, verbose=True) for port in ports]
     for (uwb1, uwb2) in combinations(modules, 2):
-        range_data = uwb1.do_twr(target_id=uwb2.get_id())
+        neighbor_id = uwb2.get_id()["id"]
+        range_data = uwb1.do_twr(target_id=neighbor_id)
         assert range_data["is_valid"]
 
 

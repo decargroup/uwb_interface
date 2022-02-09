@@ -20,12 +20,26 @@ def find_uwb_serial_ports():
         id_dict = uwb.get_id()
         if id_dict["is_valid"]:
             uwb_ports.append(port.device)
+        uwb.close()
+    sleep(1)
     return uwb_ports
 
 
 class UwbModule(object):
     """
     Main interface object for DECAR/MRASL UWB modules.
+
+    PARAMETERS:
+    -----------
+    port: str
+        path to port that the UWB device is connected to
+    baudrate: int 
+        baudrate for the serial connection with the UWB module
+    timeout: float
+        max amount of time, in seconds, to wait for a newline character from the 
+        uwb modules
+    verbose: bool
+        if set to true, full serial output will be printed. 
 
     """
 
@@ -51,7 +65,7 @@ class UwbModule(object):
     _eol = "\r"
     _eol_encoded = _eol.encode(_encoding)
 
-    def __init__(self, port, baudrate=19200, timeout=1, verbose=False):
+    def __init__(self, port, baudrate=19200, timeout=0.1, verbose=False):
         """
         Constructor
         """
@@ -68,13 +82,17 @@ class UwbModule(object):
         self._dispatcher_thread = Thread(target=self._cb_dispatcher, daemon=True)
         self._dispatcher_thread.start()
 
+    def close(self):
+        self._kill_monitor = True
+
     def _send(self, message):
         """
         Send an arbitrary string to the UWB device.
         """
         if isinstance(message, str):
+            if self.verbose:
+                print(message)
             message = message.encode(self._encoding)
-
         self.device.write(message)
 
     def _read(self):
@@ -87,7 +105,10 @@ class UwbModule(object):
         # call read(device.in_waiting) to also read whatever else is in the
         # input buffer.
         out = self.device.readline() + self.device.read(self.device.in_waiting)
-        return out.decode(self._encoding, errors="replace")
+        out = out.decode(self._encoding, errors="replace")
+        if self.verbose:
+            print(out, end="")
+        return out
 
     def _serial_monitor(self):
         """
@@ -97,8 +118,6 @@ class UwbModule(object):
 
         while not self._kill_monitor:
             out = self._read()
-            if self.verbose:
-                print(out, end="")
 
             if len(out) > 0:
 
@@ -115,9 +134,12 @@ class UwbModule(object):
                     for idx in msg_idxs:
                         temp = out[idx:]
                         idx_end = temp.find(self._eol)
-                        parsed_msg = self._parse_message(temp[:idx_end])
-                        self._response_container[parsed_msg[0]] = parsed_msg
-                        self._msg_queue.append(parsed_msg)
+                        try:
+                            parsed_msg = self._parse_message(temp[:idx_end])
+                            self._response_container[parsed_msg[0]] = parsed_msg
+                            self._msg_queue.append(parsed_msg)
+                        except:
+                            pass
 
     def _cb_dispatcher(self):
         while not self._kill_monitor:
@@ -154,42 +176,6 @@ class UwbModule(object):
                 print("This callback is not registered.")
         else:
             print("No callbacks registered for this key.")
-
-    # def _wait_for_response(self, msg_key: str, max_attempts=10):
-    #     """
-    #     Reads the serial port a max_attempts number of times until a response is
-    #     detected. Then, extracts the response.
-    #     """
-    #     idx = -1
-    #     start_time = time()
-    #     for i in range(max_attempts):
-    #         out = self._read()
-    #         idx = out.find(msg_key)
-    #         if idx >= 0:
-    #             resp = out[idx:]
-    #             idx_end = resp.find(self._eol)
-    #             return resp[:idx_end]
-    #         sleep(0.001)  # NOTE: this might limit our command frequency to 1000Hz
-    #     # TODO: we need a more standardized error reporting system
-    #     # raise RuntimeError("No valid response received.")
-    #     return False
-
-    # def _extract_response(self, string: str, msg_key: str):
-    #     idx = string.find(msg_key)
-    #     string2 = string[idx:]
-    #     idx2 = string2.find(self._eol)
-    #     return string2[:idx2]
-
-    # def _serial_exchange(self, msg: str):
-    #     """
-    #     Sends a message, then immediately collects a response.
-    #     """
-    #     self._send(msg)
-    #     response = self._read()
-    #     if len(response) == 0:
-    #         return False
-    #         # raise serial.SerialException("Didn't receive response from MCU.")
-    #     return response
 
     def _check_field_format(self, specifier: str, field):
         """
@@ -242,6 +228,13 @@ class UwbModule(object):
         return msg
 
     def _parse_message(self, msg, msg_key=None):
+        """
+        Parses a pure string message into a list of values, where each value 
+        is converted to the type as specified in _format_dict[msg_key]
+
+        If no msg_key is provided, it will automatically be detected as the 
+        first field in the message.
+        """
 
         if not isinstance(msg, str):
             msg = str(msg)
@@ -263,6 +256,7 @@ class UwbModule(object):
                 if format[i] == "int":
                     results.append(int(value))
                 elif format[i] == "float":
+                    # TODO: this can fail and cause the thread to exit
                     results.append(float(value))
                 elif format[i] == "bool":
                     results.append(bool(value))
