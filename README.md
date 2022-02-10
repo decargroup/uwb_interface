@@ -47,5 +47,8 @@ https://docs.python.org/3/library/struct.html#format-characters
 |--|--------|---------------------|------------------|
 |C00| `uwb.set_idle()`| `"C00\r"` | `"R00\r"` |
 |C01| `uwb.get_id()`| `"C01\r"`|`"R01,3\r"`
-|C02| `range_data = uwb.do_twr(target_id = 1)`| `"C02,1\r"`| `"R02,1.2345\r"`
+|C02| `uwb.reset()`| `"C02\r"`| `"R02\r"`
+|C03| `uwb.do_tests()`| `"C03\r"`| `"R03,1\r"`
+|C04| `uwb.toggle_passive(toggle = 1)`| `"C04,1\r"`| `"R04\r"`
+|C05| `range_data = uwb.do_twr(target_id = 1)`| `"C02,1\r"`| `"R02,1.2345\r"`
 |

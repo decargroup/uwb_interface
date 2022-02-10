@@ -1,6 +1,7 @@
 import serial
 from serial.tools import list_ports
 from time import time, sleep
+from threading import Thread
 
 
 def find_uwb_serial_ports():
@@ -19,6 +20,8 @@ def find_uwb_serial_ports():
         id_dict = uwb.get_id()
         if id_dict["is_valid"]:
             uwb_ports.append(port.device)
+        uwb.close()
+    sleep(1)
     return uwb_ports
 
 
@@ -26,40 +29,76 @@ class UwbModule(object):
     """
     Main interface object for DECAR/MRASL UWB modules.
 
+    PARAMETERS:
+    -----------
+    port: str
+        path to port that the UWB device is connected to
+    baudrate: int
+        baudrate for the serial connection with the UWB module
+    timeout: float
+        max amount of time, in seconds, to wait for a response to commands
+    verbose: bool
+        if set to true, full serial output will be printed.
+
     """
 
     _encoding = "utf-8"
-    _format_dict = {
+    _c_format_dict = {
         "C00": "",
-        "R00": "",
         "C01": "",
-        "R01": "int",
-        "C02": "int,bool",
-        "R02": "float",
+        "C02": "",
+        "C03": "",
+        "C04": "bool",
+        "C05": "int,bool",
     }
+    _r_format_dict = {
+        "R00": "",
+        "R01": "int",
+        "R02": "",
+        "R03": "int",
+        "R04": "",
+        "R05": "float",
+    }
+    _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
     _sep = ","
     _eol = "\r"
+    _eol_encoded = _eol.encode(_encoding)
 
-    def __init__(self, port, baudrate=19200, timeout=1):
-        self.device = serial.Serial(port, baudrate=baudrate, timeout=timeout)
-        self._eol_encoded = self._eol.encode(self._encoding)
+    def __init__(self, port, baudrate=19200, timeout=0.1, verbose=False):
+        """
+        Constructor
+        """
+        self.device = serial.Serial(port, baudrate=baudrate, timeout=0.1)
+        self.verbose = verbose
+        self.timeout = timeout
 
-    def __del__(self):
+        # Start a seperate thread for serial port monitoring
+        self._kill_monitor = False
+        self._msg_queue = []
+        self._callbacks = {}
+        self._response_container = {}
+        self._monitor_thread = Thread(target=self._serial_monitor, daemon=True)
+        self._monitor_thread.start()
+        self._dispatcher_thread = Thread(target=self._cb_dispatcher, daemon=True)
+        self._dispatcher_thread.start()
+
+    def close(self):
         """
-        Destructor.
+        Proper shutdown of this module. Note that even if the object does not
+        exist anymore in the main thread, the two internal threads will
+        continue to exist unless this method is called.
         """
-        if hasattr(self, "device"):
-            if isinstance(self.device, serial.Serial):
-                print("Closing serial connection.")
-                self.device.close()
+
+        self._kill_monitor = True
 
     def _send(self, message):
         """
         Send an arbitrary string to the UWB device.
         """
         if isinstance(message, str):
+            if self.verbose:
+                print("<< " + message)
             message = message.encode(self._encoding)
-
         self.device.write(message)
 
     def _read(self):
@@ -72,44 +111,79 @@ class UwbModule(object):
         # call read(device.in_waiting) to also read whatever else is in the
         # input buffer.
         out = self.device.readline() + self.device.read(self.device.in_waiting)
-        return out.decode(self._encoding, errors="replace")
+        out = out.decode(self._encoding, errors="replace")
+        if self.verbose:
+            print(">> " + out, end="")
+        return out
 
-    def _wait_for_response(self, msg_key: str, max_attempts=10):
+    def _serial_monitor(self):
         """
-        Reads the serial port a max_attempts number of times until a response is
-        detected. Then, extracts the response.
+        Continuously monitors the serial port, watching for official messages.
+        If an official message is detected, it is extracted and stored in a queue.
         """
-        idx = -1
-        start_time = time()
-        for i in range(max_attempts):
+
+        while not self._kill_monitor:
             out = self._read()
-            idx = out.find(msg_key)
-            if idx >= 0:
-                resp = out[idx:]
-                idx_end = resp.find(self._eol)
-                return resp[:idx_end]
-            sleep(0.001)  # NOTE: this might limit our command frequency to 1000Hz
-        # TODO: we need a more standardized error reporting system
-        # raise RuntimeError("No valid response received.")
-        return False
 
-    def _extract_response(self, string: str, msg_key: str):
-        idx = string.find(msg_key)
-        string2 = string[idx:]
-        idx2 = string2.find(self._eol)
-        return string2[:idx2]
-    
+            if len(out) > 0:
 
-    def _serial_exchange(self, msg: str):
+                # Find all messages in the string (might be slow)
+                msg_idxs = [
+                    out.find(msg_key)
+                    for msg_key in self._r_format_dict.keys()
+                    if msg_key in out
+                ]
+                msg_idxs.sort()
+
+                # Extract all the messages and parse them
+                if len(msg_idxs) > 0:
+                    for idx in msg_idxs:
+                        temp = out[idx:]
+                        idx_end = temp.find(self._eol)
+                        try:
+                            parsed_msg = self._parse_message(temp[:idx_end])
+                            self._response_container[parsed_msg[0]] = parsed_msg
+                            self._msg_queue.append(parsed_msg)
+                        except:
+                            if self.verbose:
+                                print("Message parsing error occured.")
+
+    def _cb_dispatcher(self):
+        while not self._kill_monitor:
+            if len(self._msg_queue) > 0:
+                parsed_msg = self._msg_queue.pop(0)
+
+                # Check if any callbacks are registered for this specific msg
+                if parsed_msg[0] in self._callbacks.keys():
+                    cb_list = self._callbacks[parsed_msg[0]]
+                    for cb in cb_list:
+                        cb(*parsed_msg[1:])  # Execute the callback
+            else:
+                sleep(0.001)  # To prevent high CPU usage
+                # TODO: look into threading events to avoid busywait
+
+    def register_callback(self, msg_key, cb_function):
         """
-        Sends a message, then immediately collects a response.
+        Registers a callback function to be executed whenever a specific
+        message key is received over serial.
         """
-        self._send(msg)
-        response = self._read()
-        if len(response) == 0:
-            return False
-            #raise serial.SerialException("Didn't receive response from MCU.")
-        return response
+        if msg_key in self._callbacks.keys():
+            self._callbacks[msg_key].append(cb_function)
+        else:
+            self._callbacks[msg_key] = [cb_function]
+
+    def unregister_callback(self, msg_key, cb_function):
+        """
+        Removes a callback function from the execution list corresponding to
+        a specific message key.
+        """
+        if msg_key in self._callbacks.keys():
+            if cb_function in self._callbacks[msg_key]:
+                self._callbacks[msg_key].remove(cb_function)
+            else:
+                print("This callback is not registered.")
+        else:
+            print("No callbacks registered for this key.")
 
     def _check_field_format(self, specifier: str, field):
         """
@@ -162,36 +236,59 @@ class UwbModule(object):
         return msg
 
     def _parse_message(self, msg, msg_key=None):
+        """
+        Parses a pure string message into a list of values, where each value
+        is converted to the type as specified in _format_dict[msg_key]
+
+        If no msg_key is provided, it will automatically be detected as the
+        first field in the message.
+        """
 
         if not isinstance(msg, str):
             msg = str(msg)
 
         fields = msg.split(self._sep)
-        format = self._format_dict[msg_key].split(self._sep)
-
         received_key = fields[0]
-        if msg_key is not None:
-            if received_key != msg_key:
-                # raise RuntimeError("Did not receive expected response key.")
-                return False
+        if msg_key is None:
+            msg_key = received_key
 
-        if len(fields) - 1 != len(format):
-            # raise RuntimeError("Received different amount of data than expected.")
-            return False
+        format = self._format_dict[msg_key].split(self._sep)
+        results = [received_key]
+        if format[0] == "":
+            return results
 
-        results = []
-        for i, value in enumerate(fields[1:]):
-            if format[i] == "int":
-                results.append(int(value))
-            elif format[i] == "float":
-                results.append(float(value))
-            elif format[i] == "bool":
-                results.append(bool(value))
-            elif format[i] == "str":
-                results.append(str(value))
+        for i in range(len(format)):
+            # This can potentially through errors if value is not convertible
+            # to say, a float.
+            if i + 1 <= len(fields) - 1:
+                value = fields[i + 1]
+                if format[i] == "int":
+                    results.append(int(value))
+                elif format[i] == "float":
+                    results.append(float(value))
+                elif format[i] == "bool":
+                    results.append(bool(value))
+                elif format[i] == "str":
+                    results.append(str(value))
+                else:
+                    raise RuntimeError("unsupported format type.")
             else:
-                raise RuntimeError("unsupported format type.")
+                results.append(None)
+
         return results
+
+    def _execute_command(self, command_key, response_key, *args):
+        self._response_container[response_key] = None
+        msg = self._build_message(command_key, args)
+        self._send(msg)
+        start_time = time()
+        while (
+            self._response_container[response_key] is None
+            and (time() - start_time) < self.timeout
+        ):
+            # TODO: threading package has solutions to avoid this busy wait
+            sleep(0.001)
+        return self._response_container[response_key]
 
     def set_idle(self):
         """
@@ -203,11 +300,10 @@ class UwbModule(object):
         """
         msg_key = "C00"
         rsp_key = "R00"
-        msg = self._build_message(msg_key, None)
-        raw_response = self._serial_exchange(msg)
-        response = self._extract_response(raw_response, rsp_key)
-        parsed = self._parse_message(response, rsp_key)
-        if parsed[0] == "":
+        response = self._execute_command(msg_key, rsp_key)
+        if response is None:
+            return False
+        elif response[0] == rsp_key:
             return True
         else:
             return False
@@ -226,18 +322,73 @@ class UwbModule(object):
         """
         msg_key = "C01"
         rsp_key = "R01"
-        msg = self._build_message(msg_key, None)
-        self._send(msg)
-        response = self._wait_for_response(rsp_key)
-        if response is False:
-            return {"id": -1, "is_valid": False}
-
-        parsed = self._parse_message(response, rsp_key)
-        if parsed is False:
+        response = self._execute_command(msg_key, rsp_key)
+        if response is False or response is None:
             return {"id": -1, "is_valid": False}
         else:
-            self.id = parsed[0]
-            return {"id": parsed[0], "is_valid": True}
+            self.id = response[1]
+            return {"id": response[1], "is_valid": True}
+
+    def reset(self):
+        """
+        Resets and re-enables the DW receiver.
+
+        RETURNS:
+        --------
+        bool: successfully received response
+        """
+        msg_key = "C02"
+        rsp_key = "R02"
+        response = self._execute_command(msg_key, rsp_key)
+        if response is None:
+            return False
+        elif response[0] == rsp_key:
+            return True
+        else:
+            return False
+
+    def do_tests(self):
+        """
+        Performs pre-determined tests to identify any faults with the board.
+
+        RETURNS:
+        --------
+        dict with fields:
+            error_id: int
+                ID associated with the error that occured.
+            is_valid: bool
+                whether the result is valid or some error occured
+        """
+        msg_key = "C03"
+        rsp_key = "R03"
+        response = self._execute_command(msg_key, rsp_key)
+        if response is None or response is False:
+            return {"error_id": -1, "is_valid": False}
+        else:
+            return {"error_id": response[1], "is_valid": True}
+
+    def toggle_passive(self, toggle=0):
+        """
+        Toggles the passive listening or "eavesdropping" feature.
+
+        PARAMETERS:
+        -----------
+        toggle: bool
+            flag to turn on or off passive listening
+
+        RETURNS:
+        --------
+        bool: successfully received response
+        """
+        msg_key = "C04"
+        rsp_key = "R04"
+        response = self._execute_command(msg_key, rsp_key, toggle)
+        if response is None:
+            return False
+        elif response[0] == rsp_key:
+            return True
+        else:
+            return False
 
     def do_twr(self, target_id=1, meas_at_target=False):
         """
@@ -258,17 +409,10 @@ class UwbModule(object):
             is_valid: bool
                 whether the result is valid or some error occured
         """
-        msg_key = "C02"
-        rsp_key = "R02"
-        msg = self._build_message(msg_key, [target_id, meas_at_target])
-        self._send(msg)
-        response = self._wait_for_response(rsp_key)
-        if response is False:
-            return {"range": 0.0, "is_valid": False}
-
-        parsed = self._parse_message(response, rsp_key)
-
-        if parsed is False:
+        msg_key = "C05"
+        rsp_key = "R05"
+        response = self._execute_command(msg_key, rsp_key, target_id, meas_at_target)
+        if response is False or response is None:
             return {"range": 0.0, "is_valid": False}
         else:
-            return {"range": parsed[0], "is_valid": True}
+            return {"range": response[1], "is_valid": True}
