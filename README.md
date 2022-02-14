@@ -3,15 +3,16 @@
 This python package provides a basic API to UWB modules, allowing a user to initiate and collect ranging data between devices, as well as data transfer and broadcast capabilities between UWB devices.
 
 ## Installation
-Inside this repo's directory, you may run
+Python 3.6 or greater is required. Inside this repo's directory, you may run
 
-    pip install .
+    pip3 install .
 or
 
-    pip install -e .
+    pip3 install -e .
 
 which installs the package in-place, allowing you make changes to the code without having to reinstall every time. 
 
+TODO: we could make this python2 compatible by removing the type annotations. This is not needed right now.
 
 ## Minimal Working Example
 ```python
@@ -68,4 +69,4 @@ This is a thread that is constantly reading the USB serial output for messages f
 2. Added to a message queue, which is used to trigger callbacks as described by the next thread.
 
 ### Thread 3: Callback dispatcher
-This thread continuously monitors the message queue described above, looping through any messages in the queue, executing callbacks registered for that message prefix. Hence, when a user experiences a callback call, it is inside a different thread (this one) than the main thread. Thread 3 and Thread 1 are user-facing threads, where as Thread 2 is strictly internal. The reason Thread 3 and Thread 2 weren't merged into one thread was becaused callbacks could potentially taking a very long time to execute, which would block the serial reading. This way, the serial monitor can continue to operate even if a very long callback is running.
+This thread continuously monitors the message queue described above, looping through any messages in the queue, executing callbacks registered for that message prefix. Hence, when a user experiences a callback call, it is inside a different thread (this one) than the main thread. Thread 3 and Thread 1 are user-facing threads, whereas Thread 2 is strictly internal. The reason Thread 3 and Thread 2 weren't merged into one thread was becaused callbacks could potentially taking a very long time to execute, which would block the serial reading. This way, the serial monitor can continue to operate even if a very long callback is running.
