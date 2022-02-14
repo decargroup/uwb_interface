@@ -50,5 +50,5 @@ https://docs.python.org/3/library/struct.html#format-characters
 |C02| `uwb.reset()`| `"C02\r"`| `"R02\r"`
 |C03| `uwb.do_tests()`| `"C03\r"`| `"R03,1\r"`
 |C04| `uwb.toggle_passive(toggle = 1)`| `"C04,1\r"`| `"R04\r"`
-|C05| `range_data = uwb.do_twr(target_id = 1)`| `"C02,1\r"`| `"R02,1.2345\r"`
+|C05| `range_data = uwb.do_twr(target_id = 1)`| `"C05,1\r"`| `"R05,1.2345\r"`
 |
