@@ -58,6 +58,7 @@ class UwbModule(object):
         "R03": "int",
         "R04": "",
         "R05": "float",
+        "R99": "float,float,float,float",
     }
     _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
     _sep = ","
