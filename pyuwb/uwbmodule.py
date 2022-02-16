@@ -49,7 +49,7 @@ class UwbModule(object):
         "C02": "",
         "C03": "",
         "C04": "bool",
-        "C05": "int,bool",
+        "C05": "int,bool,bool",
     }
     _r_format_dict = {
         "R00": "",
@@ -391,7 +391,7 @@ class UwbModule(object):
         else:
             return False
 
-    def do_twr(self, target_id=1, meas_at_target=False):
+    def do_twr(self, target_id=1, meas_at_target=False, mult_twr=False):
         """
         Performs Two-Way Ranging with a chosen target/destination tag.
 
@@ -401,6 +401,8 @@ class UwbModule(object):
             ID of the tag to range with
         meas_at_target: bool
             flag to have the range measurement also available at the target
+        mult_twr: bool
+            flag to indicate if the multiplicate TWR will be used 
 
         RETURNS:
         --------
@@ -412,7 +414,7 @@ class UwbModule(object):
         """
         msg_key = "C05"
         rsp_key = "R05"
-        response = self._execute_command(msg_key, rsp_key, target_id, meas_at_target)
+        response = self._execute_command(msg_key, rsp_key, target_id, meas_at_target, mult_twr)
         if response is False or response is None:
             return {"range": 0.0, "is_valid": False}
         else:
