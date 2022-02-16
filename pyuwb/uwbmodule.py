@@ -49,7 +49,7 @@ class UwbModule(object):
         "C02": "",
         "C03": "",
         "C04": "bool",
-        "C05": "int,bool,bool",
+        "C05": "int,bool,int",
     }
     _r_format_dict = {
         "R00": "",
