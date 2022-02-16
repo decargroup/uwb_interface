@@ -57,7 +57,7 @@ class UwbModule(object):
         "R02": "",
         "R03": "int",
         "R04": "",
-        "R05": "float",
+        "R05": "float,float,float,float,float,float,float",
         "R99": "float,float,float,float",
     }
     _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
@@ -391,7 +391,7 @@ class UwbModule(object):
         else:
             return False
 
-    def do_twr(self, target_id=1, meas_at_target=False, mult_twr=False):
+    def do_twr(self, target_id=1, meas_at_target=False, mult_twr=False, output_ts=False):
         """
         Performs Two-Way Ranging with a chosen target/destination tag.
 
@@ -403,6 +403,9 @@ class UwbModule(object):
             flag to have the range measurement also available at the target
         mult_twr: bool
             flag to indicate if the multiplicate TWR will be used 
+        output_ts: bool
+            flag indicate if the recorded timestamps will also be output.
+            Does not get passed to the modules.
 
         RETURNS:
         --------
@@ -417,5 +420,16 @@ class UwbModule(object):
         response = self._execute_command(msg_key, rsp_key, target_id, meas_at_target, mult_twr)
         if response is False or response is None:
             return {"range": 0.0, "is_valid": False}
+        elif output_ts is True and mult_twr is not 0:
+            return {"range": response[1], 
+                    "tx1": response[2], "rx1": response[3],
+                    "tx2": response[4], "rx2": response[5],
+                    "tx3": response[6], "rx3": response[7],
+                    "is_valid": True}
+        elif  output_ts is True and mult_twr is 0:
+            return {"range": response[1], 
+                    "tx1": response[2], "rx1": response[3],
+                    "tx2": response[4], "rx2": response[5],
+                    "is_valid": True}
         else:
             return {"range": response[1], "is_valid": True}
