@@ -57,7 +57,7 @@ class UwbModule(object):
         "R02": "",
         "R03": "int",
         "R04": "",
-        "R05": "float,float,float,float,float,float,float",
+        "R05": "int,float,float,float,float,float,float,float",
         "R99": "float,float,float,float",
     }
     _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
@@ -410,26 +410,48 @@ class UwbModule(object):
         RETURNS:
         --------
         dict with fields:
+            neighbour: int
+                id of the neighbour
             range: float
                 range measurement in meters
             is_valid: bool
                 whether the result is valid or some error occured
+            tx1: float
+                timestamp of the transmission time of signal 1 in
+                the master tag's clock
+            rx1: float
+                timestamp of the reception time of signal 1 in
+                the slave tag's clock
+            tx2: float
+                timestamp of the transmission time of signal 2 in
+                the slave tag's clock
+            rx2: float
+                timestamp of the reception time of signal 2 in
+                the master tag's clock
+            tx3: float
+                timestamp of the transmission time of signal 3 in
+                the slave tag's clock
+            rx3: float
+                timestamp of the reception time of signal 3 in
+                the master tag's clock
         """
         msg_key = "C05"
         rsp_key = "R05"
-        response = self._execute_command(msg_key, rsp_key, target_id, meas_at_target, mult_twr)
+        response = self._execute_command(msg_key, rsp_key, target_id,
+                                         meas_at_target, mult_twr)
         if response is False or response is None:
-            return {"range": 0.0, "is_valid": False}
+            return {"neighbour": 0.0, "range": 0.0, "is_valid": False}
         elif output_ts is True and mult_twr is not 0:
-            return {"range": response[1], 
-                    "tx1": response[2], "rx1": response[3],
-                    "tx2": response[4], "rx2": response[5],
+            return {"neighbour": response[1], "range": response[2], 
+                    "tx1": response[3], "rx1": response[4],
+                    "tx2": response[5], "rx2": response[6],
                     "tx3": response[6], "rx3": response[7],
                     "is_valid": True}
         elif  output_ts is True and mult_twr is 0:
-            return {"range": response[1], 
+            return {"neighbour": response[1], "range": response[2], 
                     "tx1": response[2], "rx1": response[3],
                     "tx2": response[4], "rx2": response[5],
                     "is_valid": True}
         else:
-            return {"range": response[1], "is_valid": True}
+            return {"neighbour": response[1], "range": response[2],
+                    "is_valid": True}
