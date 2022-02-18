@@ -1,6 +1,7 @@
 import serial
 from serial.tools import list_ports
 from time import time, sleep
+from datetime import datetime
 from threading import Thread
 
 
@@ -65,13 +66,14 @@ class UwbModule(object):
     _eol = "\r"
     _eol_encoded = _eol.encode(_encoding)
 
-    def __init__(self, port, baudrate=19200, timeout=0.1, verbose=False):
+    def __init__(self, port, baudrate=19200, timeout=0.1, verbose=False, log=False):
         """
         Constructor
         """
         self.device = serial.Serial(port, baudrate=baudrate, timeout=0.1)
         self.verbose = verbose
         self.timeout = timeout
+        self.log = log
 
         # Start a seperate thread for serial port monitoring
         self._kill_monitor = False
@@ -82,6 +84,13 @@ class UwbModule(object):
         self._monitor_thread.start()
         self._dispatcher_thread = Thread(target=self._cb_dispatcher, daemon=True)
         self._dispatcher_thread.start()
+
+        # Current date and time for logging
+        temp = self.get_id()
+        self.id = temp["id"]
+        temp = datetime.now()
+        self._now = temp.strftime("%d_%m_%Y_%H_%M_%S")
+        self._log_filename = "datasets/log_"+self._now+"_ID"+str(self.id)+".txt"
 
     def close(self):
         """
@@ -308,6 +317,29 @@ class UwbModule(object):
             return True
         else:
             return False
+
+    def output(self,data):
+        """
+        Outputs data by printing and saving to a log file.
+
+        PARAMETERS:
+        -----------
+        data: unspecified
+            data to be stored and printed
+
+        RETURNS:
+        --------
+        dict with keys:
+            "id": int
+                board ID
+            "is_valid": bool
+                whether the reported result is valid or an error occurred
+        """
+        data = str(data)
+        print(data)
+        if self.log is True:
+            with open(self._log_filename, "a") as myfile:
+                myfile.write(data+"\n")
 
     def get_id(self):
         """
