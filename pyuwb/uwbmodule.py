@@ -481,9 +481,10 @@ class UwbModule(object):
                     "is_valid": True}
         elif  output_ts is True and mult_twr is 0:
             return {"neighbour": response[1], "range": response[2], 
-                    "tx1": response[2], "rx1": response[3],
-                    "tx2": response[4], "rx2": response[5],
+                    "tx1": response[3], "rx1": response[4],
+                    "tx2": response[5], "rx2": response[6],
                     "is_valid": True}
         else:
             return {"neighbour": response[1], "range": response[2],
                     "is_valid": True}
+                    
