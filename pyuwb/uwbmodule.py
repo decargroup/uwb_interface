@@ -51,6 +51,7 @@ class UwbModule(object):
         "C03": "",
         "C04": "bool",
         "C05": "int,bool,int",
+        "C06": "",
     }
     _r_format_dict = {
         "R00": "",
@@ -59,6 +60,7 @@ class UwbModule(object):
         "R03": "int",
         "R04": "",
         "R05": "int,float,float,float,float,float,float,float",
+        "R06": "",
         "R99": "float,float,float,float",
     }
     _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
@@ -73,24 +75,29 @@ class UwbModule(object):
         self.device = serial.Serial(port, baudrate=baudrate, timeout=0.1)
         self.verbose = verbose
         self.timeout = timeout
-        self.log = log
+        self.logging = log
 
         # Start a seperate thread for serial port monitoring
         self._kill_monitor = False
         self._msg_queue = []
         self._callbacks = {}
         self._response_container = {}
-        self._monitor_thread = Thread(target=self._serial_monitor, daemon=True)
+        self._monitor_thread = Thread(target=self._serial_monitor, name="Serial Monitor", daemon=True)
         self._monitor_thread.start()
-        self._dispatcher_thread = Thread(target=self._cb_dispatcher, daemon=True)
+        self._dispatcher_thread = Thread(target=self._cb_dispatcher, name="Callback Dispatcher", daemon=True)
         self._dispatcher_thread.start()
 
+        # Logging
+        self._is_logfile_setup = False
+
+    def _create_log_file(self):
         # Current date and time for logging
         temp = self.get_id()
         self.id = temp["id"]
         temp = datetime.now()
         self._now = temp.strftime("%d_%m_%Y_%H_%M_%S")
         self._log_filename = "datasets/log_"+self._now+"_ID"+str(self.id)+".txt"
+
 
     def close(self):
         """
@@ -288,6 +295,9 @@ class UwbModule(object):
         return results
 
     def _execute_command(self, command_key, response_key, *args):
+        if self.logging and not self._is_logfile_setup:
+            self._create_log_file()
+            
         self._response_container[response_key] = None
         msg = self._build_message(command_key, args)
         self._send(msg)
@@ -326,20 +336,24 @@ class UwbModule(object):
         -----------
         data: unspecified
             data to be stored and printed
-
-        RETURNS:
-        --------
-        dict with keys:
-            "id": int
-                board ID
-            "is_valid": bool
-                whether the reported result is valid or an error occurred
         """
         data = str(data)
         print(data)
-        if self.log is True:
+        if self.logging is True:
             with open(self._log_filename, "a") as myfile:
                 myfile.write(data+"\n")
+
+    def log(self, data):
+        """
+        Logs data by printing and saving to a log file.
+
+        PARAMETERS:
+        -----------
+        data: unspecified
+            data to be stored and printed
+        """
+        self.output(data)
+
 
     def get_id(self):
         """
@@ -488,3 +502,20 @@ class UwbModule(object):
             return {"neighbour": response[1], "range": response[2],
                     "is_valid": True}
                     
+    def broadcast(self):
+        """
+        Broadcast an arbitrary dictionary of data over UWB.
+
+        RETURNS:
+        --------
+        bool: successfully received response
+        """
+        msg_key = "C06"
+        rsp_key = "R06"
+        response = self._execute_command(msg_key, rsp_key)
+        if response is None:
+            return False
+        elif response[0] == rsp_key:
+            return True
+        else:
+            return False
