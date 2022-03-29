@@ -71,4 +71,4 @@ def test_twr_callback():
 
 
 if __name__ == "__main__":
-    test_get_id()
+    test_twr()

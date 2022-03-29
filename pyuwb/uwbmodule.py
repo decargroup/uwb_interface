@@ -64,7 +64,7 @@ class UwbModule(object):
         "R99": "float,float,float,float",
     }
     _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
-    _sep = ","
+    _sep = "|"
     _eol = "\r"
     _eol_encoded = _eol.encode(_encoding)
 
@@ -157,13 +157,13 @@ class UwbModule(object):
                     for idx in msg_idxs:
                         temp = out[idx:]
                         idx_end = temp.find(self._eol)
-                        try:
-                            parsed_msg = self._parse_message(temp[:idx_end])
-                            self._response_container[parsed_msg[0]] = parsed_msg
-                            self._msg_queue.append(parsed_msg)
-                        except:
-                            if self.verbose:
-                                print("Message parsing error occured.")
+                        #try:
+                        parsed_msg = self._parse_message(temp[:idx_end])
+                        self._response_container[parsed_msg[0]] = parsed_msg
+                        self._msg_queue.append(parsed_msg)
+                        #except:
+                            #if self.verbose:
+                        #print("Message parsing error occured.")
 
     def _cb_dispatcher(self):
         while not self._kill_monitor:
@@ -269,13 +269,13 @@ class UwbModule(object):
         if msg_key is None:
             msg_key = received_key
 
-        format = self._format_dict[msg_key].split(self._sep)
+        format = self._format_dict[msg_key].split(",")
         results = [received_key]
         if format[0] == "":
             return results
 
         for i in range(len(format)):
-            # This can potentially through errors if value is not convertible
+            # This can potentially throw errors if value is not convertible
             # to say, a float.
             if i + 1 <= len(fields) - 1:
                 value = fields[i + 1]
@@ -297,7 +297,7 @@ class UwbModule(object):
     def _execute_command(self, command_key, response_key, *args):
         if self.logging and not self._is_logfile_setup:
             self._create_log_file()
-            
+
         self._response_container[response_key] = None
         msg = self._build_message(command_key, args)
         self._send(msg)
