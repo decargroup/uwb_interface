@@ -96,6 +96,17 @@ def test_get_id_multiple_response():
     assert response["id"] == 32
     assert response["is_valid"] == True
 
+def test_get_max_frame_length():
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+    uwb = UwbModule(port, timeout=1, verbose=True)
+    test_string = "R07|100\r\n"
+    os.write(device, test_string.encode(uwb._encoding))
+    response = uwb.get_max_frame_length()
+    out = os.read(device, 1000)
+    assert out.decode(uwb._encoding) == "C07\r"
+    assert response["length"] == 100
+    assert response["is_valid"] == True
 
 def test_do_twr():
     device, client = pty.openpty()

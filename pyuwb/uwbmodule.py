@@ -53,6 +53,7 @@ class UwbModule(object):
         "C04": "bool",
         "C05": "int,bool,int",
         "C06": "str",
+        "C07": "",
     }
     _r_format_dict = {
         "R00": "",
@@ -62,6 +63,7 @@ class UwbModule(object):
         "R04": "",
         "R05": "int,float,float,float,float,float,float,float",
         "R06": "str",
+        "R07": "int",
         "R99": "float,float,float,float",
     }
     _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
@@ -539,3 +541,26 @@ class UwbModule(object):
             return True
         else:
             return False
+
+
+    def get_max_frame_length(self):
+        """
+        Gets the module's ID.
+
+        RETURNS:
+        --------
+        dict with keys:
+            "length": int
+                max frame length (in number of bytes) that the board is
+                configured to send over UWB.
+            "is_valid": bool
+                whether the reported result is valid or an error occurred
+        """
+        msg_key = "C07"
+        rsp_key = "R07"
+        response = self._execute_command(msg_key, rsp_key)
+        if response is False or response is None:
+            return {"length": -1, "is_valid": False}
+        else:
+            self.id = response[1]
+            return {"length": response[1], "is_valid": True}

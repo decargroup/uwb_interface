@@ -96,5 +96,11 @@ def test_mult_twr_callback():
     assert tracker.num_called == 10
 
 
+def test_get_max_frame_len():
+    for uwb in modules:
+        data = uwb.get_max_frame_length()
+        print(data)
+        assert data["is_valid"]
+
 if __name__ == "__main__":
-    test_twr()
+    test_get_max_frame_len()
