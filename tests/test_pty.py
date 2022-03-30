@@ -48,7 +48,7 @@ def test_get_id():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
-    test_string = "R01,4\r\n"
+    test_string = "R01|4\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.get_id()
     out = os.read(device, 1000)
@@ -88,7 +88,7 @@ def test_get_id_multiple_response():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
-    test_string = "R05,0\r\nR01,32\r\nR00\r\nR02,1\r\n"
+    test_string = "R05|0\r\nR01|32\r\nR00\r\nR02|1\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.get_id()
     out = os.read(device, 1000)
@@ -101,11 +101,11 @@ def test_do_twr():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
-    test_string = "R05,3.14159\r\n"
+    test_string = "R05|1|3.14159|0|0|0|0|0|0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.do_twr(target_id=1)
     out = os.read(device, 1000)
-    assert out.decode(uwb._encoding) == "C05,1,0\r"
+    assert out.decode(uwb._encoding) == "C05|1|0|0\r"
     assert response["range"] == 3.14159
     assert response["is_valid"] == True
 
@@ -114,7 +114,7 @@ def test_twr_err1():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
-    test_string = "R05,3.14159abc\r\n"
+    test_string = "R05|3.14159abc\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.do_twr(target_id=1)
     assert response["range"] == 0.0
@@ -131,7 +131,7 @@ thread and the main thread.
 entered_cb1 = False
 
 
-def cb_range1(parsed_msg):
+def cb_range1(*args):
     global entered_cb1
     entered_cb1 = True
 
@@ -141,7 +141,7 @@ def test_twr_callback():
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
     uwb.register_callback("R05", cb_range1)
-    test_string = "R05,3.14159\r\n"
+    test_string = "R05|1|3.14159|0|0|0|0|0|0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     sleep(0.1)
     assert entered_cb1 == True
@@ -150,9 +150,9 @@ def test_twr_callback():
 entered_cb2 = False
 
 
-def cb_range2(parsed_msg):
+def cb_range2(*args):
     global entered_cb2
-    entered_cb12 = True
+    entered_cb2 = True
 
 
 def test_twr_callback_unregister():
@@ -161,11 +161,11 @@ def test_twr_callback_unregister():
     uwb = UwbModule(port, timeout=1, verbose=True)
     uwb.register_callback("R05", cb_range2)
     uwb.unregister_callback("R05", cb_range2)
-    test_string = "R05,3.14159\r\n"
+    test_string = "R05|3.14159\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     sleep(0.1)
     assert entered_cb2 == False
 
 
 if __name__ == "__main__":
-    test_get_id_err1()
+    test_twr_callback()

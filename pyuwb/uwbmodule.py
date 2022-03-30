@@ -3,6 +3,7 @@ from serial.tools import list_ports
 from time import time, sleep
 from datetime import datetime
 from threading import Thread
+import json
 
 
 def find_uwb_serial_ports():
@@ -51,6 +52,7 @@ class UwbModule(object):
         "C03": "",
         "C04": "bool",
         "C05": "int,bool,int",
+        "C06": "str",
     }
     _r_format_dict = {
         "R00": "",
@@ -59,10 +61,11 @@ class UwbModule(object):
         "R03": "int",
         "R04": "",
         "R05": "int,float,float,float,float,float,float,float",
+        "R06": "str",
         "R99": "float,float,float,float",
     }
     _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
-    _sep = ","
+    _sep = "|"
     _eol = "\r"
     _eol_encoded = _eol.encode(_encoding)
 
@@ -73,24 +76,32 @@ class UwbModule(object):
         self.device = serial.Serial(port, baudrate=baudrate, timeout=0.1)
         self.verbose = verbose
         self.timeout = timeout
-        self.log = log
+        self.logging = log
 
         # Start a seperate thread for serial port monitoring
         self._kill_monitor = False
         self._msg_queue = []
         self._callbacks = {}
         self._response_container = {}
-        self._monitor_thread = Thread(target=self._serial_monitor, daemon=True)
+        self._monitor_thread = Thread(
+            target=self._serial_monitor, name="Serial Monitor", daemon=True
+        )
         self._monitor_thread.start()
-        self._dispatcher_thread = Thread(target=self._cb_dispatcher, daemon=True)
+        self._dispatcher_thread = Thread(
+            target=self._cb_dispatcher, name="Callback Dispatcher", daemon=True
+        )
         self._dispatcher_thread.start()
 
+        # Logging
+        self._is_logfile_setup = False
+
+    def _create_log_file(self):
         # Current date and time for logging
         temp = self.get_id()
         self.id = temp["id"]
         temp = datetime.now()
         self._now = temp.strftime("%d_%m_%Y_%H_%M_%S")
-        self._log_filename = "datasets/log_"+self._now+"_ID"+str(self.id)+".txt"
+        self._log_filename = "datasets/log_" + self._now + "_ID" + str(self.id) + ".txt"
 
     def close(self):
         """
@@ -121,9 +132,10 @@ class UwbModule(object):
         # call read(device.in_waiting) to also read whatever else is in the
         # input buffer.
         out = self.device.readline() + self.device.read(self.device.in_waiting)
-        out = out.decode(self._encoding, errors="replace")
+        out = out.decode(self._encoding, errors="ignore")
         if self.verbose:
-            print(">> " + out, end="")
+            print(">> ", end="")
+            print(out, end="")
         return out
 
     def _serial_monitor(self):
@@ -150,13 +162,13 @@ class UwbModule(object):
                     for idx in msg_idxs:
                         temp = out[idx:]
                         idx_end = temp.find(self._eol)
-                        try:
-                            parsed_msg = self._parse_message(temp[:idx_end])
-                            self._response_container[parsed_msg[0]] = parsed_msg
-                            self._msg_queue.append(parsed_msg)
-                        except:
-                            if self.verbose:
-                                print("Message parsing error occured.")
+                        # try:
+                        parsed_msg = self._parse_message(temp[:idx_end])
+                        self._response_container[parsed_msg[0]] = parsed_msg
+                        self._msg_queue.append(parsed_msg)
+                        # except:
+                        # if self.verbose:
+                        # print("Message parsing error occured.")
 
     def _cb_dispatcher(self):
         while not self._kill_monitor:
@@ -262,13 +274,13 @@ class UwbModule(object):
         if msg_key is None:
             msg_key = received_key
 
-        format = self._format_dict[msg_key].split(self._sep)
+        format = self._format_dict[msg_key].split(",")
         results = [received_key]
         if format[0] == "":
             return results
 
         for i in range(len(format)):
-            # This can potentially through errors if value is not convertible
+            # This can potentially throw errors if value is not convertible
             # to say, a float.
             if i + 1 <= len(fields) - 1:
                 value = fields[i + 1]
@@ -288,6 +300,9 @@ class UwbModule(object):
         return results
 
     def _execute_command(self, command_key, response_key, *args):
+        if self.logging and not self._is_logfile_setup:
+            self._create_log_file()
+
         self._response_container[response_key] = None
         msg = self._build_message(command_key, args)
         self._send(msg)
@@ -318,7 +333,7 @@ class UwbModule(object):
         else:
             return False
 
-    def output(self,data):
+    def output(self, data):
         """
         Outputs data by printing and saving to a log file.
 
@@ -326,20 +341,23 @@ class UwbModule(object):
         -----------
         data: unspecified
             data to be stored and printed
-
-        RETURNS:
-        --------
-        dict with keys:
-            "id": int
-                board ID
-            "is_valid": bool
-                whether the reported result is valid or an error occurred
         """
         data = str(data)
         print(data)
-        if self.log is True:
+        if self.logging is True:
             with open(self._log_filename, "a") as myfile:
-                myfile.write(data+"\n")
+                myfile.write(data + "\n")
+
+    def log(self, data):
+        """
+        Logs data by printing and saving to a log file.
+
+        PARAMETERS:
+        -----------
+        data: unspecified
+            data to be stored and printed
+        """
+        self.output(data)
 
     def get_id(self):
         """
@@ -423,7 +441,9 @@ class UwbModule(object):
         else:
             return False
 
-    def do_twr(self, target_id=1, meas_at_target=False, mult_twr=False, output_ts=False):
+    def do_twr(
+        self, target_id=1, meas_at_target=False, mult_twr=False, output_ts=False
+    ):
         """
         Performs Two-Way Ranging with a chosen target/destination tag.
 
@@ -434,7 +454,7 @@ class UwbModule(object):
         meas_at_target: bool
             flag to have the range measurement also available at the target
         mult_twr: bool
-            flag to indicate if the multiplicate TWR will be used 
+            flag to indicate if the multiplicate TWR will be used
         output_ts: bool
             flag indicate if the recorded timestamps will also be output.
             Does not get passed to the modules.
@@ -469,22 +489,53 @@ class UwbModule(object):
         """
         msg_key = "C05"
         rsp_key = "R05"
-        response = self._execute_command(msg_key, rsp_key, target_id,
-                                         meas_at_target, mult_twr)
+        response = self._execute_command(
+            msg_key, rsp_key, target_id, meas_at_target, mult_twr
+        )
         if response is False or response is None:
             return {"neighbour": 0.0, "range": 0.0, "is_valid": False}
         elif output_ts is True and mult_twr is not 0:
-            return {"neighbour": response[1], "range": response[2], 
-                    "tx1": response[3], "rx1": response[4],
-                    "tx2": response[5], "rx2": response[6],
-                    "tx3": response[7], "rx3": response[8],
-                    "is_valid": True}
-        elif  output_ts is True and mult_twr is 0:
-            return {"neighbour": response[1], "range": response[2], 
-                    "tx1": response[3], "rx1": response[4],
-                    "tx2": response[5], "rx2": response[6],
-                    "is_valid": True}
+            return {
+                "neighbour": response[1],
+                "range": response[2],
+                "tx1": response[3],
+                "rx1": response[4],
+                "tx2": response[5],
+                "rx2": response[6],
+                "tx3": response[7],
+                "rx3": response[8],
+                "is_valid": True,
+            }
+        elif output_ts is True and mult_twr is 0:
+            return {
+                "neighbour": response[1],
+                "range": response[2],
+                "tx1": response[3],
+                "rx1": response[4],
+                "tx2": response[5],
+                "rx2": response[6],
+                "is_valid": True,
+            }
         else:
-            return {"neighbour": response[1], "range": response[2],
-                    "is_valid": True}
-                    
+            return {"neighbour": response[1], "range": response[2], "is_valid": True}
+
+    def broadcast(self, data):
+        """
+        Broadcast an arbitrary dictionary of data over UWB.
+
+        RETURNS:
+        --------
+        bool: successfully received response
+        """
+        msg_key = "C06"
+        rsp_key = "R06"
+
+        data_serialized = json.dumps(data)
+
+        response = self._execute_command(msg_key, rsp_key, data_serialized)
+        if response is None:
+            return False
+        elif response[0] == rsp_key:
+            return True
+        else:
+            return False
