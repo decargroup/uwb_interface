@@ -11,6 +11,7 @@ to the computer.
 ports = find_uwb_serial_ports()
 modules = [UwbModule(port, verbose=True) for port in ports]
 
+
 def test_get_id():
     for uwb in modules:
         data = uwb.get_id()
@@ -31,7 +32,7 @@ def test_twr():
 def test_twr_meas_at_target():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
-        
+
     uwb1 = modules[0]
     uwb2 = modules[1]
     neighbor_id = uwb2.get_id()["id"]
@@ -62,7 +63,32 @@ def test_twr_callback():
     # TODO: message prefixes are not meant to be user-facing
     N = 10
     for i in range(N):
-        range_data = uwb1.do_twr(target_id=neighbor_id, meas_at_target=True, mult_twr=True)
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id, meas_at_target=True, mult_twr=False
+        )
+        assert range_data["range"] != 0.0
+        assert range_data["is_valid"]
+        sleep(0.01)
+    sleep(0.1)
+    assert tracker.num_called == 10
+
+def test_mult_twr_callback():
+    if len(modules) < 2:
+        pytest.skip("At least two modules need to be connected.")
+
+    uwb1 = modules[0]
+    uwb1.verbose = False
+    uwb2 = modules[1]
+    neighbor_id = uwb2.get_id()["id"]
+    tracker = DummyCallbackTracker()
+    uwb2.register_callback("R05", tracker.dummy_callback)
+
+    # TODO: message prefixes are not meant to be user-facing
+    N = 10
+    for i in range(N):
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id, meas_at_target=True, mult_twr=True
+        )
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
         sleep(0.01)
