@@ -60,10 +60,10 @@ class UwbModule(object):
         "R02": "",
         "R03": "int",
         "R04": "",
-        "R05": "int,float,float,float,float,float,float,float,float",
+        "R05": "int,float,int,int,int,int,int,int,float,float",
         "R06": "str",
-        "S01": "float,float,float,float,float,float,float",
-        "S05": "int,float,float,float,float,float,float,float,float",
+        "S01": "int,int,int,int,int,int,float",
+        "S05": "int,float,int,int,int,int,int,int,float,float",
     }
     _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
     _sep = "|"
@@ -487,8 +487,10 @@ class UwbModule(object):
             rx3: float
                 timestamp of the reception time of signal 3 in
                 the initiator tag's clock
-            Pr: float
-                the received power
+            Pr1: float
+                the power at the target tag for the first signal
+            Pr2: float
+                the power at the initiator tag for the second signal
         """
         msg_key = "C05"
         rsp_key = "R05"
@@ -507,7 +509,8 @@ class UwbModule(object):
                 "rx2": response[6],
                 "tx3": response[7],
                 "rx3": response[8],
-                "Pr": response[9], 
+                "Pr1": response[9], 
+                "Pr2": response[10], 
                 "is_valid": True,
             }
         else:
