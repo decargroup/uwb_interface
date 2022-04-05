@@ -72,6 +72,7 @@ def test_twr_callback():
     sleep(0.1)
     assert tracker.num_called == 10
 
+
 def test_mult_twr_callback():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
@@ -101,6 +102,21 @@ def test_get_max_frame_len():
         data = uwb.get_max_frame_length()
         print(data)
         assert data["is_valid"]
+
+
+def test_firmware_tests():
+    for uwb in modules:
+        data = uwb.do_tests()
+        print(data)
+        assert data["is_valid"]
+
+
+# Tests to add:
+# - sending two commands immediately
+# - sending strings
+# - sending floats
+# - sending bytes
+
 
 if __name__ == "__main__":
     test_get_max_frame_len()

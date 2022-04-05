@@ -102,7 +102,7 @@ class Packer:
             msg += self._sep + field_types[i].pack(val)
         msg += self._eol
 
-        return msg[1:] # Dont include initial seperator
+        return msg # Dont include initial seperator
 
     def unpack(self, msg: bytes, field_types: List[Field]):
 
@@ -110,6 +110,10 @@ class Packer:
         results = [] 
         if field_types is None or len(field_types) == 0:
             return results
+
+        # There will always be a seperator character at the beginning.
+        # Remove it.
+        msg = msg[1:]
 
         for field in field_types:
 

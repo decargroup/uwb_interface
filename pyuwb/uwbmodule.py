@@ -4,9 +4,9 @@ from time import time, sleep
 from datetime import datetime
 from threading import Thread
 import msgpack
-import struct
+import traceback
 from typing import List, Any
-
+from .packing import Packer, IntField, BoolField, StringField, FloatField, ByteField
 
 def find_uwb_serial_ports():
     """
@@ -48,31 +48,31 @@ class UwbModule(object):
 
     _encoding = "utf-8"
     _c_format_dict = {
-        "C00": "",
-        "C01": "",
-        "C02": "",
-        "C03": "",
-        "C04": "bool",
-        "C05": "int,bool,int",
-        "C06": "str",
-        "C07": "",
+        "C00": [],
+        "C01": [],
+        "C02": [],
+        "C03": [IntField, StringField, BoolField, FloatField, ByteField],
+        "C04": [BoolField],
+        "C05": [IntField, BoolField, BoolField],
+        "C06": [StringField],
+        "C07": [],
     }
     _r_format_dict = {
-        "R00": "",
-        "R01": "int",
-        "R02": "",
-        "R03": "int,int,str,bool,float,bytes",
-        "R04": "",
-        "R05": "int,float,float,float,float,float,float,float",
-        "R06": "str",
-        "R07": "int",
-        "R99": "float,float,float,float",
+        "R00": [],
+        "R01": [IntField],
+        "R02": [],
+        "R03": [IntField, IntField, StringField, BoolField, FloatField, ByteField], 
+        "R04": [],
+        "R05": [IntField] + [FloatField]*7,
+        "R06": [StringField],
+        "R07": [IntField],
+        "R99": [FloatField]*4,
     }
     _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
-    _sep = "|"
-    _sep_encoded = _sep.encode(_encoding)
-    _eol = "\r"
-    _eol_encoded = _eol.encode(_encoding)
+    # _sep = "|"
+    # _sep_encoded = _sep.encode(_encoding)
+    # _eol = "\r"
+    # _eol_encoded = _eol.encode(_encoding)
 
     def __init__(
         self, port, baudrate=19200, timeout=0.1, verbose=False, log=False
@@ -97,6 +97,8 @@ class UwbModule(object):
             key.encode(self._encoding): val
             for key, val in self._format_dict.items()
         }
+        self.packer = Packer(seperator='|', terminator='\r')
+
 
         # Start a seperate thread for serial port monitoring
         self._kill_monitor = False
@@ -139,9 +141,12 @@ class UwbModule(object):
         Send an arbitrary string to the UWB device.
         """
         if isinstance(message, str):
-            if self.verbose:
-                print("<< " + message)
-            message = message.encode(self._encoding)
+            message = message.encode(self._encoding) #TODO: should remove this.
+
+        if self.verbose:
+            print("<< ", end="")
+            print(str(message)[2:-1], end="")
+            
         self.device.write(message)
 
     def _read(self) -> bytes:
@@ -155,9 +160,7 @@ class UwbModule(object):
         # input buffer.
         out = self.device.readline() + self.device.read(self.device.in_waiting)
         # out = out.decode(self._encoding, errors="ignore")
-        if self.verbose:
-            print(">> ", end="")
-            print(str(out)[2:-1], end="")
+        
         return out
 
     def _serial_monitor(self):
@@ -183,25 +186,27 @@ class UwbModule(object):
                 if len(msg_idxs) > 0:
                     for idx in msg_idxs:
                         temp = out[idx:]
+                        msg_key = temp[0:3]
                         try:
-                            parsed_msg = self._parse_message(temp)
-                            self._response_container[parsed_msg[0]] = parsed_msg
-                            self._msg_queue.append(parsed_msg)
+                            field_values = self.packer.unpack(temp[3:], self._r_format_dict[msg_key])
+                            self._response_container[msg_key] = field_values
+                            self._msg_queue.append((msg_key, field_values))
                         except Exception as e:
                            if self.verbose:
                                print("Message parsing error occured.")
+                               print(traceback.format_exc())
                                print(e)
 
     def _cb_dispatcher(self):
         while not self._kill_monitor:
             if len(self._msg_queue) > 0:
-                parsed_msg = self._msg_queue.pop(0)
+                msg_key, field_values = self._msg_queue.pop(0)
 
                 # Check if any callbacks are registered for this specific msg
-                if parsed_msg[0] in self._callbacks.keys():
-                    cb_list = self._callbacks[parsed_msg[0]]
+                if msg_key in self._callbacks.keys():
+                    cb_list = self._callbacks[msg_key]
                     for cb in cb_list:
-                        cb(*parsed_msg[1:])  # Execute the callback
+                        cb(*field_values)  # Execute the callback
             else:
                 sleep(0.001)  # To prevent high CPU usage
                 # TODO: look into threading events to avoid busywait
@@ -217,7 +222,7 @@ class UwbModule(object):
         else:
             self._callbacks[msg_key] = [cb_function]
 
-    def unregister_callback(self, msg_key, cb_function):
+    def unregister_callback(self, msg_key: str, cb_function):
         """
         Removes a callback function from the execution list corresponding to
         a specific message key.
@@ -231,135 +236,12 @@ class UwbModule(object):
         else:
             print("No callbacks registered for this key.")
 
-    def _check_field_format(self, specifier: str, field):
-        """
-        Checks to see if a particular field complies with its format specifier.
-        """
-        # TODO: replaceable with field.is_valid()
-        specifier = specifier.strip()
-        if specifier == "int":
-            return isinstance(field, int)
-        if specifier == "float":
-            return isinstance(field, float)
-        if specifier == "str":
-            return isinstance(field, str)
-        if specifier == "bool":
-            return isinstance(field, bool)
-        if specifier == "uint":
-            return isinstance(field, int) and field >= 0
-
-    def _build_message(
-        self, msg_key: str, fieldvalues: List[Any] = None
-    ) -> bytes:
-        """
-        Constructs the message string and checks if the format is correct.
-        """
-        # TODO: move to packer.pack(msg_key, fields)
-        # Check to see if all the fieldvalues match with the message format
-        msg_key = msg_key.encode(self._encoding)
-        if len(self._format_dict[msg_key]) > 0:
-            fieldtypes = self._format_dict[msg_key].split(",")
-            for i, t in enumerate(fieldtypes):
-                if not self._check_field_format(t, fieldvalues[i]):
-                    raise RuntimeError("Incorrect message format.")
-
-        # Assemble the message
-        msg = msg_key
-        converted = []
-        if fieldvalues is not None:
-
-            # Perform type-specific conversion on each field.
-            for value in fieldvalues:
-                if isinstance(value, bool):
-                    converted.append(str(int(value)))
-                elif isinstance(value, int):
-                    converted.append(str(value))
-                elif isinstance(value, float):
-                    converted.append(struct.pack("<f", value))
-                elif isinstance(value, str):
-                    converted.append(value)
-                elif isinstance(value, bytes):
-                    num_bytes = len(value)
-                    converted.append(struct.pack("<H", num_bytes) + value)
-
-        for i in range(len(converted)):
-            if isinstance(converted[i], str):
-                converted[i] = converted[i].encode(self._encoding)
-
-        if len(converted) > 0:
-            msg += self._sep_encoded + self._sep_encoded.join(converted)
-
-        msg += "\r".encode(self._encoding)
-        return msg
-
-    def _parse_message(self, msg: bytes):
-        """
-        Parses a pure string message into a list of values, where each value
-        is converted to the type as specified in _format_dict[msg_key]
-        """
-        # TODO: Potentially getting moved to a Packer() object.
-        # packer.unpack(msg: bytes)
-
-        # Received key is first three bytes
-        received_key = msg[0:3]
-
-        format = self._format_dict[received_key].split(",")
-        results = [received_key]
-        if format[0] == "":
-            return results
-
-        current_idx = 4
-        for i in range(len(format)):
-            # Find the soonest or either the seperator or terimnator
-            next_sep = msg[current_idx:].find(self._sep_encoded)
-            next_eol = msg[current_idx:].find(self._eol_encoded)
-            if next_sep == -1 and next_eol == -1:
-                raise RuntimeError(
-                    "No seperator or terminator detected in received message."
-                )
-            elif next_sep == -1:
-                next_idx = next_eol
-            elif next_eol == -1:
-                next_idx = next_sep
-            else:
-                next_idx = min(next_sep, next_eol)
-            next_idx += current_idx
-
-            if format[i] == "int":
-                results.append(int(msg[current_idx:next_idx]))
-                current_idx = next_idx + 1
-
-            elif format[i] == "float":
-                results.append(float(msg[current_idx:next_idx].decode(self._encoding)))
-                current_idx = next_idx + 1
-
-            elif format[i] == "bool":
-                if (next_idx - current_idx) != 1:
-                    raise RuntimeError("Bool field is more than 1 byte..")
-                results.append(bool(msg[current_idx]))
-                current_idx = next_idx + 1
-
-            elif format[i] == "str":
-                results.append(msg[current_idx:next_idx].decode(self._encoding))
-                current_idx = next_idx + 1
-
-            elif format[i] == "bytes":
-                fieldlen = struct.unpack(
-                    "<H", msg[current_idx : current_idx + 2]
-                )
-                current_idx += 2
-                results.append(msg[current_idx : current_idx + fieldlen[0]])
-                current_idx += fieldlen[0]+ 1
-
-            else:
-                raise RuntimeError("unsupported format type.")
-
-        return results
-
     def _execute_command(self, command_key: str, response_key: str, *args):
+        command_key = command_key.encode(self._encoding)
         response_key = response_key.encode(self._encoding)
         self._response_container[response_key] = None
-        msg = self._build_message(command_key, args)
+        msg = self.packer.pack(args, self._c_format_dict[command_key])
+        msg = command_key + msg
         self._send(msg)
         start_time = time()
         while (
@@ -439,8 +321,8 @@ class UwbModule(object):
         if response is False or response is None:
             return {"id": None, "is_valid": False}
         else:
-            self.id = response[1]
-            return {"id": response[1], "is_valid": True}
+            self.id = response[0]
+            return {"id": response[0], "is_valid": True}
 
     def reset(self):
         """
@@ -455,10 +337,8 @@ class UwbModule(object):
         response = self._execute_command(msg_key, rsp_key)
         if response is None:
             return False
-        elif response[0] == rsp_key:
-            return True
         else:
-            return False
+            return True
 
     def do_tests(self):
         """
@@ -488,7 +368,7 @@ class UwbModule(object):
         if response is None or response is False:
             return {"error_id": -1, "is_valid": False}
         else:
-            return {"error_id": response[1], "is_valid": True}
+            return {"error_id": response[0], "is_valid": True}
 
     def toggle_passive(self, toggle=False):
         """
@@ -508,10 +388,8 @@ class UwbModule(object):
         response = self._execute_command(msg_key, rsp_key, toggle)
         if response is None:
             return False
-        elif response[0] == rsp_key:
-            return True
         else:
-            return False
+            return True
 
     def do_twr(
         self, target_id=1, meas_at_target=False, mult_twr=False, output_ts=False
@@ -568,30 +446,30 @@ class UwbModule(object):
             return {"neighbour": 0.0, "range": 0.0, "is_valid": False}
         elif output_ts is True and mult_twr is not 0:
             return {
-                "neighbour": response[1],
-                "range": response[2],
-                "tx1": response[3],
-                "rx1": response[4],
-                "tx2": response[5],
-                "rx2": response[6],
-                "tx3": response[7],
-                "rx3": response[8],
+                "neighbour": response[0],
+                "range": response[1],
+                "tx1": response[2],
+                "rx1": response[3],
+                "tx2": response[4],
+                "rx2": response[5],
+                "tx3": response[6],
+                "rx3": response[7],
                 "is_valid": True,
             }
         elif output_ts is True and mult_twr is 0:
             return {
-                "neighbour": response[1],
-                "range": response[2],
-                "tx1": response[3],
-                "rx1": response[4],
-                "tx2": response[5],
-                "rx2": response[6],
+                "neighbour": response[0],
+                "range": response[1],
+                "tx1": response[2],
+                "rx1": response[3],
+                "tx2": response[4],
+                "rx2": response[5],
                 "is_valid": True,
             }
         else:
             return {
-                "neighbour": response[1],
-                "range": response[2],
+                "neighbour": response[0],
+                "range": response[1],
                 "is_valid": True,
             }
 
@@ -611,10 +489,8 @@ class UwbModule(object):
         response = self._execute_command(msg_key, rsp_key, data_serialized)
         if response is None:
             return False
-        elif response[0] == rsp_key:
+        else: 
             return True
-        else:
-            return False
 
     def get_max_frame_length(self):
         """
@@ -635,5 +511,5 @@ class UwbModule(object):
         if response is False or response is None:
             return {"length": -1, "is_valid": False}
         else:
-            self.id = response[1]
-            return {"length": response[1], "is_valid": True}
+            self.id = response[0]
+            return {"length": response[0], "is_valid": True}

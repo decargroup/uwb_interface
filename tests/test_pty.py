@@ -180,7 +180,7 @@ def test_firmware_tests():
     device, client = pty.openpty()
     port = os.ttyname(client)
     test_string = (
-        b"R03|123456|the test string|1|1.234567891011e-8|"
+        b"R03|0|123456|the test string|1|1.234567891011e-8|"
         b"G\x00\x82\xa1a\xcb@\t!\xf9\xf0\x1b\x86n\xa1b\x92\x93\xcb?\xf0\x00\x00\x00"
         b"\x00\x00\x00\xcb@\x00\x00\x00\x00\x00\x00\x00\xcb@\x08\x00\x00\x00\x00"
         b"\x00\x00\x93\xcb@\x10\x00\x00\x00\x00\x00\x00\xcb@\x14\x00\x00\x00\x00"
@@ -194,4 +194,4 @@ def test_firmware_tests():
 
 
 if __name__ == "__main__":
-    test_get_id_err2()
+    test_firmware_tests()
