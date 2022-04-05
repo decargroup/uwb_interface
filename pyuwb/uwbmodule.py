@@ -62,7 +62,7 @@ class UwbModule(object):
         "R04": "",
         "R05": "int,float,int,int,int,int,int,int,float,float",
         "R06": "str",
-        "S01": "int,int,int,int,int,int,float",
+        "S01": "int,int,int,int,int,int,int,int,int,int,int,float,float,float,float,float",
         "S05": "int,float,int,int,int,int,int,int,float,float",
     }
     _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
