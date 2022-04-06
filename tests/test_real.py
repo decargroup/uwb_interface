@@ -79,7 +79,7 @@ def test_twr_callback():
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
-    assert tracker.num_called == 10
+    assert tracker.num_called == N
 
 def test_mult_twr_callback():
     if len(modules) < 2:
@@ -102,7 +102,7 @@ def test_mult_twr_callback():
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
-    assert tracker.num_called == 10
+    assert tracker.num_called == N
 
 def test_passive_listening():
     if len(modules) < 3:
@@ -116,8 +116,10 @@ def test_passive_listening():
     tracker = DummyCallbackTracker()
     uwb3.register_callback("S01", tracker.dummy_callback)
 
-    # TODO: message prefixes are not meant to be user-facing
-    N = 10
+    uwb3.toggle_passive(toggle=True)
+    sleep(0.1)
+
+    N = 5
     for i in range(N):
         range_data = uwb1.do_twr(
             target_id=neighbor_id, meas_at_target=True, mult_twr=True
@@ -126,7 +128,37 @@ def test_passive_listening():
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
-    assert tracker.num_called == 10
+    assert tracker.num_called == N
+
+    for i in range(N):
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id, meas_at_target=False, mult_twr=True
+        )
+        assert range_data["range"] != 0.0
+        assert range_data["is_valid"]
+        sleep(0.01)
+    sleep(0.1)
+    assert tracker.num_called == 2*N
+
+    for i in range(N):
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id, meas_at_target=True, mult_twr=False
+        )
+        assert range_data["range"] != 0.0
+        assert range_data["is_valid"]
+        sleep(0.01)
+    sleep(0.1)
+    assert tracker.num_called == 3*N
+
+    for i in range(N):
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id, meas_at_target=False, mult_twr=False
+        )
+        assert range_data["range"] != 0.0
+        assert range_data["is_valid"]
+        sleep(0.01)
+    sleep(0.1)
+    assert tracker.num_called == 4*N
 
 
 if __name__ == "__main__":
