@@ -184,4 +184,4 @@ def test_firmware_tests():
 
 
 if __name__ == "__main__":
-    test_get_max_frame_len()
+    test_firmware_tests()

@@ -115,7 +115,7 @@ def test_do_twr():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
-    test_string = "R05|1|3.14159|0|0|0|0|0|0\r\n"
+    test_string = "R05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.do_twr(target_id=1)
     out = os.read(device, 1000)
@@ -156,8 +156,8 @@ def test_twr_callback():
     port = os.ttyname(client)
     tracker = DummyCallbackTracker()
     uwb = UwbModule(port, timeout=1, verbose=True)
-    uwb.register_callback("R05", tracker.dummy_callback)
-    test_string = "R05|1|3.14159|0|0|0|0|0|0\r\n"
+    uwb.register_callback("S05", tracker.dummy_callback)
+    test_string = "S05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     sleep(0.1)
     assert tracker.entered_cb == True
@@ -170,7 +170,7 @@ def test_twr_callback_unregister():
     uwb = UwbModule(port, timeout=1, verbose=True)
     uwb.register_callback("R05", tracker.dummy_callback)
     uwb.unregister_callback("R05", tracker.dummy_callback)
-    test_string = "R05|1|3.14159|0|0|0|0|0|0\r\n"
+    test_string = "R05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     sleep(0.1)
     assert tracker.entered_cb == False
@@ -194,4 +194,4 @@ def test_firmware_tests():
 
 
 if __name__ == "__main__":
-    test_firmware_tests()
+    test_do_twr()

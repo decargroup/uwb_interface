@@ -462,16 +462,16 @@ class UwbModule(object):
             return {"neighbour": 0.0, "range": 0.0, "is_valid": False}
         elif only_range is False:
             return {
-                "neighbour": response[1],
-                "range": response[2],
-                "tx1": response[3],
-                "rx1": response[4],
-                "tx2": response[5],
-                "rx2": response[6],
-                "tx3": response[7],
-                "rx3": response[8],
-                "Pr1": response[9], 
-                "Pr2": response[10], 
+                "neighbour": response[0],
+                "range": response[1],
+                "tx1": response[2],
+                "rx1": response[3],
+                "tx2": response[4],
+                "rx2": response[5],
+                "tx3": response[6],
+                "rx3": response[7],
+                "Pr1": response[8], 
+                "Pr2": response[9], 
                 "is_valid": True,
             }
         else:
