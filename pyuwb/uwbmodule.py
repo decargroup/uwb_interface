@@ -6,7 +6,15 @@ from threading import Thread
 import msgpack
 import traceback
 from typing import List, Any
-from .packing import Packer, IntField, BoolField, StringField, FloatField, ByteField
+from .packing import (
+    Packer,
+    IntField,
+    BoolField,
+    StringField,
+    FloatField,
+    ByteField,
+)
+
 
 def find_uwb_serial_ports():
     """
@@ -61,22 +69,15 @@ class UwbModule(object):
         "R00": [],
         "R01": [IntField],
         "R02": [],
-        "R03": [IntField, IntField, StringField, BoolField, FloatField, ByteField], 
+        "R03": [IntField, IntField, StringField, BoolField, FloatField, ByteField],
         "R04": [],
-        "R05": [IntField] + [FloatField]*7,
+        "R05": [IntField] + [FloatField] * 7,
         "R06": [StringField],
         "R07": [IntField],
-        "R99": [FloatField]*4,
+        "R99": [FloatField] * 4,
     }
-    _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
-    # _sep = "|"
-    # _sep_encoded = _sep.encode(_encoding)
-    # _eol = "\r"
-    # _eol_encoded = _eol.encode(_encoding)
 
-    def __init__(
-        self, port, baudrate=19200, timeout=0.1, verbose=False, log=False
-    ):
+    def __init__(self, port, baudrate=19200, timeout=0.1, verbose=False, log=False):
         """
         Constructor
         """
@@ -86,19 +87,12 @@ class UwbModule(object):
         self.logging = log
 
         self._r_format_dict = {
-            key.encode(self._encoding): val
-            for key, val in self._r_format_dict.items()
+            key.encode(self._encoding): val for key, val in self._r_format_dict.items()
         }
         self._c_format_dict = {
-            key.encode(self._encoding): val
-            for key, val in self._c_format_dict.items()
+            key.encode(self._encoding): val for key, val in self._c_format_dict.items()
         }
-        self._format_dict = {
-            key.encode(self._encoding): val
-            for key, val in self._format_dict.items()
-        }
-        self.packer = Packer(seperator='|', terminator='\r')
-
+        self.packer = Packer(seperator="|", terminator="\r")
 
         # Start a seperate thread for serial port monitoring
         self._kill_monitor = False
@@ -123,9 +117,7 @@ class UwbModule(object):
         self.id = temp["id"]
         temp = datetime.now()
         now = temp.strftime("%d_%m_%Y_%H_%M_%S")
-        self._log_filename = (
-            "datasets/log_" + now + "_ID" + str(self.id) + ".txt"
-        )
+        self._log_filename = "datasets/log_" + now + "_ID" + str(self.id) + ".txt"
 
     def close(self):
         """
@@ -141,12 +133,12 @@ class UwbModule(object):
         Send an arbitrary string to the UWB device.
         """
         if isinstance(message, str):
-            message = message.encode(self._encoding) #TODO: should remove this.
+            message = message.encode(self._encoding)  # TODO: should remove this.
 
         if self.verbose:
             print("<< ", end="")
-            print(str(message)[2:-1], end="")
-            
+            print(str(message)[2:-1])
+
         self.device.write(message)
 
     def _read(self) -> bytes:
@@ -159,8 +151,9 @@ class UwbModule(object):
         # call read(device.in_waiting) to also read whatever else is in the
         # input buffer.
         out = self.device.readline() + self.device.read(self.device.in_waiting)
-        # out = out.decode(self._encoding, errors="ignore")
-        
+        if self.verbose and len(out) > 0:
+            print(">> ", end="")
+            print(str(out)[2:-1])
         return out
 
     def _serial_monitor(self):
@@ -188,14 +181,15 @@ class UwbModule(object):
                         temp = out[idx:]
                         msg_key = temp[0:3]
                         try:
-                            field_values = self.packer.unpack(temp[3:], self._r_format_dict[msg_key])
+                            field_values = self.packer.unpack(
+                                temp[3:], self._r_format_dict[msg_key]
+                            )
                             self._response_container[msg_key] = field_values
                             self._msg_queue.append((msg_key, field_values))
-                        except Exception as e:
-                           if self.verbose:
-                               print("Message parsing error occured.")
-                               print(traceback.format_exc())
-                               print(e)
+                        except Exception:
+                            if self.verbose:
+                                print("Message parsing error occured.")
+                                print(traceback.format_exc())
 
     def _cb_dispatcher(self):
         while not self._kill_monitor:
@@ -298,10 +292,8 @@ class UwbModule(object):
         response = self._execute_command(msg_key, rsp_key)
         if response is None:
             return False
-        elif response[0] == rsp_key:
-            return True
         else:
-            return False
+            return True
 
     def get_id(self):
         """
@@ -318,7 +310,7 @@ class UwbModule(object):
         msg_key = "C01"
         rsp_key = "R01"
         response = self._execute_command(msg_key, rsp_key)
-        if response is False or response is None:
+        if response is None:
             return {"id": None, "is_valid": False}
         else:
             self.id = response[0]
@@ -356,19 +348,38 @@ class UwbModule(object):
         rsp_key = "R03"
 
         test_dict = {"a": 3.14159, "b": [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]}
-        test_bytes = msgpack.packb(test_dict)
+        test_bytes = msgpack.packb(test_dict, use_single_float=True)
         test_fields = [
-            123456,
+            12345,
             "the test string",
             True,
-            1.234567891011e-8,
+            1.2345,
             test_bytes,
         ]
         response = self._execute_command(msg_key, rsp_key, *test_fields)
-        if response is None or response is False:
-            return {"error_id": -1, "is_valid": False}
+
+        if response is None:
+            return {
+                "error_id": -1,
+                "is_valid": False,
+                "parsing_test": False,
+            }
         else:
-            return {"error_id": response[0], "is_valid": True}
+            if (
+                test_fields[0] != response[1]
+                or test_fields[1] != response[2]
+                or test_fields[2] != response[3]
+                or test_fields[3] != response[4]
+                or test_fields[4] != response[5]
+            ):
+                firmware_parsing_error = False
+            else:
+                firmware_parsing_error = True
+            return {
+                "error_id": response[0],
+                "is_valid": True,
+                "parsing_test": firmware_parsing_error,
+            }
 
     def toggle_passive(self, toggle=False):
         """
@@ -442,7 +453,7 @@ class UwbModule(object):
         response = self._execute_command(
             msg_key, rsp_key, target_id, meas_at_target, mult_twr
         )
-        if response is False or response is None:
+        if response is None:
             return {"neighbour": 0.0, "range": 0.0, "is_valid": False}
         elif output_ts is True and mult_twr is not 0:
             return {
@@ -473,7 +484,7 @@ class UwbModule(object):
                 "is_valid": True,
             }
 
-    def broadcast(self, data):
+    def broadcast(self, data: str):
         """
         Broadcast an arbitrary dictionary of data over UWB.
 
@@ -484,12 +495,12 @@ class UwbModule(object):
         msg_key = "C06"
         rsp_key = "R06"
 
-        data_serialized = msgpack.packb(data, use_single_float=True)
+        # data_serialized = msgpack.packb(data, use_single_float=True)
 
-        response = self._execute_command(msg_key, rsp_key, data_serialized)
+        response = self._execute_command(msg_key, rsp_key, data)
         if response is None:
             return False
-        else: 
+        else:
             return True
 
     def get_max_frame_length(self):

@@ -180,17 +180,17 @@ def test_firmware_tests():
     device, client = pty.openpty()
     port = os.ttyname(client)
     test_string = (
-        b"R03|0|123456|the test string|1|1.234567891011e-8|"
-        b"G\x00\x82\xa1a\xcb@\t!\xf9\xf0\x1b\x86n\xa1b\x92\x93\xcb?\xf0\x00\x00\x00"
-        b"\x00\x00\x00\xcb@\x00\x00\x00\x00\x00\x00\x00\xcb@\x08\x00\x00\x00\x00"
-        b"\x00\x00\x93\xcb@\x10\x00\x00\x00\x00\x00\x00\xcb@\x14\x00\x00\x00\x00"
-        b"\x00\x00\xcb@\x18\x00\x00\x00\x00\x00\x00\r"
+        b"R03|0|12345|the test string|1|1.2345|"
+        b"+\x00\x82\xa1a\xca@I\x0f\xd0\xa1b\x92\x93\xca?\x80\x00\x00\xca@\x00"
+        b"\x00\x00\xca@@\x00\x00\x93\xca@\x80\x00\x00\xca@\xa0\x00\x00\xca@"
+        b"\xc0\x00\x00\r\n"
     )
     uwb = UwbModule(port, timeout=100, verbose=True)
     os.write(device, test_string)
     data = uwb.do_tests()
     sleep(0.1)
     assert data["is_valid"]
+    assert data["parsing_test"] == True
 
 
 if __name__ == "__main__":

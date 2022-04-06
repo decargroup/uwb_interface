@@ -107,8 +107,8 @@ def test_get_max_frame_len():
 def test_firmware_tests():
     for uwb in modules:
         data = uwb.do_tests()
-        print(data)
         assert data["is_valid"]
+        assert data["parsing_test"] == True
 
 
 # Tests to add:
