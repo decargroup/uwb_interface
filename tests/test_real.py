@@ -28,6 +28,15 @@ def test_twr():
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
 
+def test_power():
+    if len(modules) < 2:
+        pytest.skip("At least two modules need to be connected.")
+
+    for (uwb1, uwb2) in combinations(modules, 2):
+        neighbor_id = uwb2.get_id()["id"]
+        range_data = uwb1.do_twr(target_id=neighbor_id, only_range=False)
+        assert range_data["Pr1"] != 0.0
+        assert range_data["is_valid"]
 
 def test_twr_meas_at_target():
     if len(modules) < 2:
@@ -58,7 +67,7 @@ def test_twr_callback():
     uwb2 = modules[1]
     neighbor_id = uwb2.get_id()["id"]
     tracker = DummyCallbackTracker()
-    uwb2.register_callback("R05", tracker.dummy_callback)
+    uwb2.register_callback("S05", tracker.dummy_callback)
 
     # TODO: message prefixes are not meant to be user-facing
     N = 10
@@ -70,7 +79,7 @@ def test_twr_callback():
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
-    assert tracker.num_called == 10
+    assert tracker.num_called == N
 
 
 def test_mult_twr_callback():
@@ -82,7 +91,7 @@ def test_mult_twr_callback():
     uwb2 = modules[1]
     neighbor_id = uwb2.get_id()["id"]
     tracker = DummyCallbackTracker()
-    uwb2.register_callback("R05", tracker.dummy_callback)
+    uwb2.register_callback("S05", tracker.dummy_callback)
 
     # TODO: message prefixes are not meant to be user-facing
     N = 10
@@ -94,7 +103,63 @@ def test_mult_twr_callback():
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
-    assert tracker.num_called == 10
+    assert tracker.num_called == N
+
+def test_passive_listening():
+    if len(modules) < 3:
+        pytest.skip("At least three modules need to be connected.")
+
+    uwb1 = modules[0]
+    uwb1.verbose = False
+    uwb2 = modules[1]
+    uwb3 = modules[2]
+    neighbor_id = uwb2.get_id()["id"]
+    tracker = DummyCallbackTracker()
+    uwb3.register_callback("S01", tracker.dummy_callback)
+
+    uwb3.toggle_passive(toggle=True)
+    sleep(0.1)
+
+    N = 5
+    for i in range(N):
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id, meas_at_target=True, mult_twr=True
+        )
+        assert range_data["range"] != 0.0
+        assert range_data["is_valid"]
+        sleep(0.01)
+    sleep(0.1)
+    assert tracker.num_called == N
+
+    for i in range(N):
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id, meas_at_target=False, mult_twr=True
+        )
+        assert range_data["range"] != 0.0
+        assert range_data["is_valid"]
+        sleep(0.01)
+    sleep(0.1)
+    assert tracker.num_called == 2*N
+
+    for i in range(N):
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id, meas_at_target=True, mult_twr=False
+        )
+        assert range_data["range"] != 0.0
+        assert range_data["is_valid"]
+        sleep(0.01)
+    sleep(0.1)
+    assert tracker.num_called == 3*N
+
+    for i in range(N):
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id, meas_at_target=False, mult_twr=False
+        )
+        assert range_data["range"] != 0.0
+        assert range_data["is_valid"]
+        sleep(0.01)
+    sleep(0.1)
+    assert tracker.num_called == 4*N
 
 
 def test_get_max_frame_len():

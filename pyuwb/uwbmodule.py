@@ -71,10 +71,11 @@ class UwbModule(object):
         "R02": [],
         "R03": [IntField, IntField, StringField, BoolField, FloatField, ByteField],
         "R04": [],
-        "R05": [IntField] + [FloatField] * 7,
+        "R05": [IntField, FloatField] + [IntField]*6 + [FloatField]*2,
         "R06": [StringField],
         "R07": [IntField],
-        "R99": [FloatField] * 4,
+        "S01": [IntField]*11 + [FloatField]*5,
+        "S05": [IntField, FloatField] + [IntField]*6 + [FloatField]*2,
     }
 
     def __init__(self, port, baudrate=19200, timeout=0.1, verbose=False, log=False):
@@ -403,7 +404,7 @@ class UwbModule(object):
             return True
 
     def do_twr(
-        self, target_id=1, meas_at_target=False, mult_twr=False, output_ts=False
+        self, target_id=1, meas_at_target=False, mult_twr=False, only_range=False
     ):
         """
         Performs Two-Way Ranging with a chosen target/destination tag.
@@ -416,9 +417,9 @@ class UwbModule(object):
             flag to have the range measurement also available at the target
         mult_twr: bool
             flag to indicate if the multiplicate TWR will be used
-        output_ts: bool
-            flag indicate if the recorded timestamps will also be output.
-            Does not get passed to the modules.
+        only_range: bool
+            flag indicate if only range measurements should be output.
+            NOTE: Does not get passed to the modules.
 
         RETURNS:
         --------
@@ -431,22 +432,26 @@ class UwbModule(object):
                 whether the result is valid or some error occured
             tx1: float
                 timestamp of the transmission time of signal 1 in
-                the master tag's clock
+                the initiator tag's clock
             rx1: float
                 timestamp of the reception time of signal 1 in
-                the slave tag's clock
+                the target tag's clock
             tx2: float
                 timestamp of the transmission time of signal 2 in
-                the slave tag's clock
+                the target tag's clock
             rx2: float
                 timestamp of the reception time of signal 2 in
-                the master tag's clock
+                the initiator tag's clock
             tx3: float
                 timestamp of the transmission time of signal 3 in
-                the slave tag's clock
+                the target tag's clock
             rx3: float
                 timestamp of the reception time of signal 3 in
-                the master tag's clock
+                the initiator tag's clock
+            Pr1: float
+                the power at the target tag for the first signal
+            Pr2: float
+                the power at the initiator tag for the second signal
         """
         msg_key = "C05"
         rsp_key = "R05"
@@ -455,26 +460,18 @@ class UwbModule(object):
         )
         if response is None:
             return {"neighbour": 0.0, "range": 0.0, "is_valid": False}
-        elif output_ts is True and mult_twr is not 0:
+        elif only_range is False:
             return {
-                "neighbour": response[0],
-                "range": response[1],
-                "tx1": response[2],
-                "rx1": response[3],
-                "tx2": response[4],
-                "rx2": response[5],
-                "tx3": response[6],
-                "rx3": response[7],
-                "is_valid": True,
-            }
-        elif output_ts is True and mult_twr is 0:
-            return {
-                "neighbour": response[0],
-                "range": response[1],
-                "tx1": response[2],
-                "rx1": response[3],
-                "tx2": response[4],
-                "rx2": response[5],
+                "neighbour": response[1],
+                "range": response[2],
+                "tx1": response[3],
+                "rx1": response[4],
+                "tx2": response[5],
+                "rx2": response[6],
+                "tx3": response[7],
+                "rx3": response[8],
+                "Pr1": response[9], 
+                "Pr2": response[10], 
                 "is_valid": True,
             }
         else:
