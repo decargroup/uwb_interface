@@ -62,7 +62,7 @@ class UwbModule(object):
         "C03": [IntField, StringField, BoolField, FloatField, ByteField],
         "C04": [BoolField],
         "C05": [IntField, BoolField, BoolField],
-        "C06": [StringField],
+        "C06": [ByteField],
         "C07": [],
     }
     _r_format_dict = {
@@ -72,10 +72,11 @@ class UwbModule(object):
         "R03": [IntField, IntField, StringField, BoolField, FloatField, ByteField],
         "R04": [],
         "R05": [IntField, FloatField] + [IntField]*6 + [FloatField]*2,
-        "R06": [StringField],
+        "R06": [],
         "R07": [IntField],
         "S01": [IntField]*11 + [FloatField]*5,
         "S05": [IntField, FloatField] + [IntField]*6 + [FloatField]*2,
+        "S06": [ByteField],
     }
 
     def __init__(self, port, baudrate=19200, timeout=0.1, verbose=False, log=False):
@@ -481,24 +482,28 @@ class UwbModule(object):
                 "is_valid": True,
             }
 
-    def broadcast(self, data: str):
+
+    def broadcast(self, data: bytes):
         """
-        Broadcast an arbitrary dictionary of data over UWB.
+        Broadcast string of bytes data over UWB.
 
         RETURNS:
         --------
-        bool: successfully received response
+        bool: successfully sent
         """
+        if not isinstance(data, bytes):
+            raise RuntimeError("Data must be of bytes type.")
+
         msg_key = "C06"
         rsp_key = "R06"
-
-        # data_serialized = msgpack.packb(data, use_single_float=True)
 
         response = self._execute_command(msg_key, rsp_key, data)
         if response is None:
             return False
         else:
             return True
+
+    
 
     def get_max_frame_length(self):
         """

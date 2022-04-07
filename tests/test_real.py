@@ -2,7 +2,7 @@ from pyuwb.uwbmodule import UwbModule, find_uwb_serial_ports
 from itertools import combinations
 import pytest
 from time import sleep
-
+import msgpack
 """ 
 These tests require a minimum of two modules physically connected
 to the computer.
@@ -176,12 +176,47 @@ def test_firmware_tests():
         assert data["parsing_test"] == True
 
 
-# Tests to add:
-# - sending two commands immediately
-# - sending strings
-# - sending floats
-# - sending bytes
+class MessageTracker:
+    def callback(self, msg):
+        self.msg = msg
+
+
+def test_broadcast():
+    if len(modules) < 2:
+        pytest.skip("At least two modules need to be connected.")
+
+    trackers = [MessageTracker() for uwb in modules[1:]]
+
+    for i, uwb in enumerate(modules[1:]):
+        uwb.register_callback("S06",trackers[i].callback)
+
+    test_msg = b'test\0\r\n|message'
+    modules[0].broadcast(test_msg)
+    sleep(0.1)
+
+    for tracker in trackers:
+        assert tracker.msg == test_msg
+
+def test_broadcast_msgpack():
+    if len(modules) < 2:
+        pytest.skip("At least two modules need to be connected.")
+
+    trackers = [MessageTracker() for uwb in modules[1:]]
+
+    for i, uwb in enumerate(modules[1:]):
+        uwb.register_callback("S06",trackers[i].callback)
+
+    test_msg = {
+    "t": 3.14159,
+    "x":[1,2,3],
+    "P":[[1,0,0],[0,1,0],[0,0,1]],
+    }
+    data = msgpack.packb(test_msg)
+    modules[0].broadcast(data)
+    sleep(0.1)
+    for tracker in trackers:
+        assert msgpack.unpackb(tracker.msg) == test_msg
 
 
 if __name__ == "__main__":
-    test_firmware_tests()
+    test_broadcast_msgpack()
