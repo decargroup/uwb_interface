@@ -192,10 +192,10 @@ def test_broadcast():
 
     test_msg = b'test\0\r\n|message'
     modules[0].broadcast(test_msg)
-    sleep(0.1)
+    sleep(0.2)
 
     for tracker in trackers:
-        assert tracker.msg == test_msg
+        assert tracker.msg[1:] == test_msg
 
 def test_broadcast_msgpack():
     if len(modules) < 2:
@@ -215,8 +215,50 @@ def test_broadcast_msgpack():
     modules[0].broadcast(data)
     sleep(0.1)
     for tracker in trackers:
+        assert msgpack.unpackb(tracker.msg[1:]) == test_msg
+
+
+def test_message_callback():
+    if len(modules) < 2:
+        pytest.skip("At least two modules need to be connected.")
+
+    trackers = [MessageTracker() for uwb in modules[1:]]
+
+    for i, uwb in enumerate(modules[1:]):
+        uwb.register_message_callback(trackers[i].callback)
+
+    test_msg = {
+    "t": 3.14159,
+    "x":[1,2,3],
+    "P":[[1,0,0],[0,1,0],[0,0,1]],
+    }
+    data = msgpack.packb(test_msg)
+    modules[0].broadcast(data)
+    sleep(0.1)
+    for tracker in trackers:
+        assert msgpack.unpackb(tracker.msg) == test_msg
+
+
+def test_long_message():
+    if len(modules) < 2:
+        pytest.skip("At least two modules need to be connected.")
+
+    trackers = [MessageTracker() for uwb in modules[1:]]
+
+    for i, uwb in enumerate(modules[1:]):
+        uwb.register_message_callback(trackers[i].callback)
+
+    test_msg = {
+    "t": 3.14159,
+    "x":[1.0]*15,
+    "P":[[1.0]*i for i in range(1,15+1)],
+    }
+    data = msgpack.packb(test_msg)
+    modules[0].broadcast(data)
+    sleep(1)
+    for tracker in trackers:
         assert msgpack.unpackb(tracker.msg) == test_msg
 
 
 if __name__ == "__main__":
-    test_broadcast_msgpack()
+    test_long_message()

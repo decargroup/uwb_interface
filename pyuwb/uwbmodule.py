@@ -1,3 +1,4 @@
+import struct
 import serial
 from serial.tools import list_ports
 from time import time, sleep
@@ -112,6 +113,10 @@ class UwbModule(object):
 
         # Logging
         self._log_filename = None
+
+        # Messaging internal variables.
+        self._max_frame_len = None
+        self._receivers = {}
 
     def _create_log_file(self):
         # Current date and time for logging
@@ -483,28 +488,6 @@ class UwbModule(object):
             }
 
 
-    def broadcast(self, data: bytes):
-        """
-        Broadcast string of bytes data over UWB.
-
-        RETURNS:
-        --------
-        bool: successfully sent
-        """
-        if not isinstance(data, bytes):
-            raise RuntimeError("Data must be of bytes type.")
-
-        msg_key = "C06"
-        rsp_key = "R06"
-
-        response = self._execute_command(msg_key, rsp_key, data)
-        if response is None:
-            return False
-        else:
-            return True
-
-    
-
     def get_max_frame_length(self):
         """
         Gets the module's ID.
@@ -526,3 +509,77 @@ class UwbModule(object):
         else:
             self.id = response[0]
             return {"length": response[0], "is_valid": True}
+
+
+    def broadcast(self, data: bytes):
+        """
+        Broadcast string of bytes data over UWB.
+
+        RETURNS:
+        --------
+        bool: successfully sent
+        """
+        if not isinstance(data, bytes):
+            raise RuntimeError("Data must be of bytes type.")
+
+        if self._max_frame_len is None:
+            len_data = self.get_max_frame_length()
+            if len_data["is_valid"]:
+                self._max_frame_len = len_data["length"]
+            else: 
+                RuntimeError("Unable to detect the max supported UWB frame length.")
+
+        msg_key = "C06"
+        rsp_key = "R06"
+
+        # add a small buffer to not hit max frame length exactly.
+        frame_len = self._max_frame_len - 20 
+        num_msg = int(len(data)/frame_len) + 1
+        frames = [data[i:i+frame_len] for i in range(0, len(data), frame_len)]
+
+        for i, frame in enumerate(frames):
+            indexed_frame = struct.pack("<B", num_msg - i - 1) + frame
+            response = self._execute_command(msg_key, rsp_key, indexed_frame)
+
+        if response is None:
+            return False
+        else:
+            return True
+
+    def register_message_callback(self, cb_function):
+        receiver = LongMessageReceiver(cb_function)
+        self._receivers[id(cb_function)] = receiver
+        self.register_callback("S06", receiver.frame_callback)
+        
+    def unregister_message_callback(self, cb_function):
+        if not id(cb_function) in self._receivers.keys():
+            print("This callback is not registered.")
+
+        receiver  = self._receivers[id(cb_function)]
+        self.unregister_callback("S06", receiver.frame_callback)
+
+class LongMessageReceiver:
+    def __init__(self, cb_function) -> None:
+        self._long_msg = b''
+        self._cb_function = cb_function
+        self._exp_frames_remaining = None
+
+    def frame_callback(self, msg):
+
+        # TODO: i believe the line below can be replaced with just msg[0] since
+        # we are only using one byte for this. (no more than 256 frames).
+        frames_remaining = struct.unpack("<B", msg[0:1])[0]
+        self._long_msg += msg[1:]
+
+        if self._exp_frames_remaining is None:
+            self._exp_frames_remaining = frames_remaining
+        elif (self._exp_frames_remaining - 1) != frames_remaining:
+            print("WARNING: A frame was missed in a frame sequence.")
+        else:
+            self._exp_frames_remaining = frames_remaining
+
+        if frames_remaining == 0:
+            self._cb_function(self._long_msg)
+            self._long_msg = b''
+            self._exp_frames_remaining = None
+
