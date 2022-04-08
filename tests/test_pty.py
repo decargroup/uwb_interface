@@ -185,7 +185,7 @@ def test_firmware_tests():
         b"\x00\x00\xca@@\x00\x00\x93\xca@\x80\x00\x00\xca@\xa0\x00\x00\xca@"
         b"\xc0\x00\x00\r\n"
     )
-    uwb = UwbModule(port, timeout=100, verbose=True)
+    uwb = UwbModule(port, timeout=10, verbose=True)
     os.write(device, test_string)
     data = uwb.do_tests()
     sleep(0.1)
@@ -194,4 +194,4 @@ def test_firmware_tests():
 
 
 if __name__ == "__main__":
-    test_do_twr()
+    test_get_id_err2()

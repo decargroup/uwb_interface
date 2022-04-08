@@ -13,6 +13,9 @@ modules = [UwbModule(port, verbose=True) for port in ports]
 
 
 def test_get_id():
+    if len(modules) < 1:
+        pytest.skip("At least one module needs to be connected.")
+
     for uwb in modules:
         data = uwb.get_id()
         assert data["is_valid"]
@@ -163,6 +166,9 @@ def test_passive_listening():
 
 
 def test_get_max_frame_len():
+    if len(modules) < 1:
+        pytest.skip("At least one module needs to be connected.")
+
     for uwb in modules:
         data = uwb.get_max_frame_length()
         print(data)
@@ -170,6 +176,9 @@ def test_get_max_frame_len():
 
 
 def test_firmware_tests():
+    if len(modules) < 1:
+        pytest.skip("At least one module needs to be connected.")
+
     for uwb in modules:
         data = uwb.do_tests()
         assert data["is_valid"]
@@ -248,6 +257,7 @@ def test_long_message():
     for i, uwb in enumerate(modules[1:]):
         uwb.register_message_callback(trackers[i].callback)
 
+
     test_msg = {
     "t": 3.14159,
     "x":[1.0]*15,
@@ -255,7 +265,7 @@ def test_long_message():
     }
     data = msgpack.packb(test_msg)
     modules[0].broadcast(data)
-    sleep(1)
+    sleep(0.1)
     for tracker in trackers:
         assert msgpack.unpackb(tracker.msg) == test_msg
 

@@ -3,7 +3,8 @@ import serial
 from serial.tools import list_ports
 from time import time, sleep
 from datetime import datetime
-from threading import Thread
+import threading
+import queue
 import msgpack
 import traceback
 from typing import List, Any
@@ -99,15 +100,19 @@ class UwbModule(object):
 
         # Start a seperate thread for serial port monitoring
         self._kill_monitor = False
-        self._msg_queue = []
+        self._msg_queue = queue.Queue()
         self._callbacks = {}
         self._response_container = {}
-        self._monitor_thread = Thread(
-            target=self._serial_monitor, name="Serial Monitor", daemon=True
+        self._response_condition = threading.Condition()
+        self._main_thread = threading.main_thread()
+
+        self._monitor_thread = threading.Thread(
+            target=self._serial_monitor, name="Serial Monitor"
         )
         self._monitor_thread.start()
-        self._dispatcher_thread = Thread(
-            target=self._cb_dispatcher, name="Callback Dispatcher", daemon=True
+
+        self._dispatcher_thread = threading.Thread(
+            target=self._cb_dispatcher, name="Callback Dispatcher"
         )
         self._dispatcher_thread.start()
 
@@ -130,7 +135,7 @@ class UwbModule(object):
         """
         Proper shutdown of this module. Note that even if the object does not
         exist anymore in the main thread, the two internal threads will
-        continue to exist unless this method is called.
+        continue to exist unless this method is called or the main thread exits.
         """
 
         self._kill_monitor = True
@@ -157,7 +162,7 @@ class UwbModule(object):
         # arrive over USB. However, once we do recieve a message, we immediately
         # call read(device.in_waiting) to also read whatever else is in the
         # input buffer.
-        out = self.device.readline() + self.device.read(self.device.in_waiting)
+        out = self.device.read_until(b'\r\n') + self.device.read(self.device.in_waiting)
         if self.verbose and len(out) > 0:
             print(">> ", end="")
             print(str(out)[2:-1])
@@ -168,13 +173,35 @@ class UwbModule(object):
         Continuously monitors the serial port, watching for official messages.
         If an official message is detected, it is extracted and stored in a queue.
         """
+        time_to_exit = False
+        while True:
 
-        while not self._kill_monitor:
+            if self._kill_monitor or not self._main_thread.is_alive():
+                # Why not just put this condition in the while loop condition?
+                # Because this way, we will read the serial and process
+                # messages one last time before exiting. 
+                time_to_exit = True 
+
+            # This line here blocks for a short timeout using pyserial's 
+            # readline() and timeout functionality. Due to the presence of the
+            # timeout inside readline(), it still means we end up "polling" at
+            # a low frequency. 
             out = self._read()
 
             if len(out) > 0:
 
                 # Find all messages in the string (might be slow)
+                # TODO: there is probably a faster way to do this. For example,
+                # we could check for just "C", "R", or "S" i.e. the message
+                # beginnings. Although this increases the likelihood of these
+                # getting detected randomly in a byte field. Actually, theres
+                # even the veeeeerry slight possibility that a full command
+                # prefix of the form C02 or something shows up in a byte field.
+                # To get around this, the message packer will have to report
+                # the end of the message.
+
+                # TODO: when having repeated message keys, the second one will 
+                # be missed. 
                 msg_idxs = [
                     out.find(msg_key)
                     for msg_key in self._r_format_dict.keys()
@@ -184,33 +211,49 @@ class UwbModule(object):
 
                 # Extract all the messages and parse them
                 if len(msg_idxs) > 0:
-                    for idx in msg_idxs:
-                        temp = out[idx:]
-                        msg_key = temp[0:3]
-                        try:
-                            field_values = self.packer.unpack(
-                                temp[3:], self._r_format_dict[msg_key]
-                            )
-                            self._response_container[msg_key] = field_values
-                            self._msg_queue.append((msg_key, field_values))
-                        except Exception:
-                            if self.verbose:
-                                print("Message parsing error occured.")
-                                print(traceback.format_exc())
+                    with self._response_condition:
+                        for idx in msg_idxs:
+                            temp = out[idx:]
+                            msg_key = temp[0:3]
+                            try:
+                                field_values = self.packer.unpack(
+                                    temp[3:], self._r_format_dict[msg_key]
+                                )
+                                self._response_container[msg_key] = field_values
+                                self._response_condition.notify()
+                                self._msg_queue.put((msg_key, field_values))
+                            except Exception:
+                                if self.verbose:
+                                    print("Message parsing error occured.")
+                                    print(traceback.format_exc())
+                    
+
+            if time_to_exit:
+                self._msg_queue.put(None) # Signals CB dispatcher to exit.
+                break # Exits this thread.
 
     def _cb_dispatcher(self):
-        while not self._kill_monitor:
-            if len(self._msg_queue) > 0:
-                msg_key, field_values = self._msg_queue.pop(0)
+        """
+        Thread which executes callbacks by watching a message queue from the 
+        firmware.
+
+        This thread will shutdown when either the main thread dies or this 
+        object's close() method is called, and if the queue is empty.
+        """
+        while True:
+            # Waits 
+            msg = self._msg_queue.get()
+            if msg is None:
+                break # Shut down the read.
+            else: 
+                msg_key, field_values = msg
 
                 # Check if any callbacks are registered for this specific msg
                 if msg_key in self._callbacks.keys():
                     cb_list = self._callbacks[msg_key]
                     for cb in cb_list:
                         cb(*field_values)  # Execute the callback
-            else:
-                sleep(0.001)  # To prevent high CPU usage
-                # TODO: look into threading events to avoid busywait
+            
 
     def register_callback(self, msg_key: str, cb_function):
         """
@@ -240,18 +283,15 @@ class UwbModule(object):
     def _execute_command(self, command_key: str, response_key: str, *args):
         command_key = command_key.encode(self._encoding)
         response_key = response_key.encode(self._encoding)
-        self._response_container[response_key] = None
-        msg = self.packer.pack(args, self._c_format_dict[command_key])
-        msg = command_key + msg
-        self._send(msg)
-        start_time = time()
-        while (
-            self._response_container[response_key] is None
-            and (time() - start_time) < self.timeout
-        ):
-            # TODO: threading package has solutions to avoid this busy wait
-            sleep(0.001)
-        return self._response_container[response_key]
+        with self._response_condition:
+            self._response_container[response_key] = None
+            msg = self.packer.pack(args, self._c_format_dict[command_key])
+            msg = command_key + msg
+            self._send(msg)
+            self._response_condition.wait(self.timeout)
+            response = self._response_container[response_key]
+
+        return response
 
     def output(self, data):
         """
@@ -540,7 +580,7 @@ class UwbModule(object):
         for i, frame in enumerate(frames):
             indexed_frame = struct.pack("<B", num_msg - i - 1) + frame
             response = self._execute_command(msg_key, rsp_key, indexed_frame)
-
+            #//sleep(0.001)
         if response is None:
             return False
         else:
@@ -569,6 +609,7 @@ class LongMessageReceiver:
         # TODO: i believe the line below can be replaced with just msg[0] since
         # we are only using one byte for this. (no more than 256 frames).
         frames_remaining = struct.unpack("<B", msg[0:1])[0]
+        print("GOT THE FOLLOWING: " + str(frames_remaining))
         self._long_msg += msg[1:]
 
         if self._exp_frames_remaining is None:
@@ -582,4 +623,3 @@ class LongMessageReceiver:
             self._cb_function(self._long_msg)
             self._long_msg = b''
             self._exp_frames_remaining = None
-
