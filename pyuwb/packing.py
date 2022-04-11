@@ -15,7 +15,7 @@ class Field(ABC):
        of that type.
 
     In the unpack method, the index of the next key character will also be
-    supplied. A key character is either a field seperator or a message
+    supplied. A key character is either a field separator or a message
     terminator. The implementation of the unpack method can therefore use the
     location of the key character to detect how many bytes to read. As a
     second output argument, it is mandatory to provide the index of the first
@@ -35,7 +35,7 @@ class Field(ABC):
         pass
 
 
-class IntField:
+class IntField(Field):
     @staticmethod
     def pack(value: int) -> bytes:
         return str(value).encode(encoding)
@@ -45,7 +45,7 @@ class IntField:
         return int(msg[:next_key_idx].decode(encoding)), next_key_idx
 
 
-class BoolField:
+class BoolField(Field):
     @staticmethod
     def pack(value: bool) -> bytes:
         return str(int(value)).encode(encoding)
@@ -58,7 +58,7 @@ class BoolField:
         return bool(msg[:next_key_idx].decode(encoding)), next_key_idx
 
 
-class StringField:
+class StringField(Field):
     @staticmethod
     def pack(value: str) -> bytes:
         return value.encode(encoding)
@@ -68,7 +68,7 @@ class StringField:
         return msg[:next_key_idx].decode(encoding), next_key_idx
 
 
-class FloatField:
+class FloatField(Field):
     @staticmethod
     def pack(value: float) -> bytes:
         return struct.pack("<f", value)
@@ -78,7 +78,7 @@ class FloatField:
         return float(msg[:next_key_idx].decode(encoding)), next_key_idx
 
 
-class ByteField:
+class ByteField(Field):
     @staticmethod
     def pack(value: bytes) -> bytes:
         num_bytes = len(value)
@@ -112,7 +112,7 @@ class Packer:
         if field_types is None or len(field_types) == 0:
             return results, msg.find(b'\r')
 
-        # There will always be a seperator character at the beginning.
+        # There will always be a separator character at the beginning.
         # Remove it.
         og_msg = msg
         msg_end_idx = 0

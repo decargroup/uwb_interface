@@ -98,7 +98,7 @@ class UwbModule(object):
         }
         self.packer = Packer(separator="|", terminator="\r")
 
-        # Start a seperate thread for serial port monitoring
+        # Start a separate thread for serial port monitoring
         self._kill_monitor = False
         self._msg_queue = queue.Queue()
         self._callbacks = {}
