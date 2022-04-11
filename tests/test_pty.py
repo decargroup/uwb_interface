@@ -84,6 +84,17 @@ def test_get_id_err2():
     assert response["id"] is None
     assert response["is_valid"] == False
 
+def test_get_id_no_response():
+    """
+    Get ID when no response is returned.
+    """
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+    uwb = UwbModule(port, timeout=1, verbose=True)
+    response = uwb.get_id()
+    assert response["id"] == None
+    assert response["is_valid"] is False
+
 
 def test_get_id_multiple_response():
     device, client = pty.openpty()
@@ -194,4 +205,4 @@ def test_firmware_tests():
 
 
 if __name__ == "__main__":
-    test_get_id_err2()
+    test_get_id()

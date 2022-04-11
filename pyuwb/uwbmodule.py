@@ -96,7 +96,7 @@ class UwbModule(object):
         self._c_format_dict = {
             key.encode(self._encoding): val for key, val in self._c_format_dict.items()
         }
-        self.packer = Packer(seperator="|", terminator="\r")
+        self.packer = Packer(separator="|", terminator="\r")
 
         # Start a seperate thread for serial port monitoring
         self._kill_monitor = False
@@ -123,22 +123,108 @@ class UwbModule(object):
         self._max_frame_len = None
         self._receivers = {}
 
-    def _create_log_file(self):
-        # Current date and time for logging
-        temp = self.get_id()
-        self.id = temp["id"]
-        temp = datetime.now()
-        now = temp.strftime("%d_%m_%Y_%H_%M_%S")
-        self._log_filename = "datasets/log_" + now + "_ID" + str(self.id) + ".txt"
-
-    def close(self):
+    def _serial_monitor(self):
         """
-        Proper shutdown of this module. Note that even if the object does not
-        exist anymore in the main thread, the two internal threads will
-        continue to exist unless this method is called or the main thread exits.
-        """
+        SERIAL MONITOR THREAD
 
-        self._kill_monitor = True
+        Continuously monitors the serial port, watching for official messages.
+        If an official message is detected, it is extracted and stored in a queue.
+        """
+        time_to_exit = False
+        while True:
+
+            if self._kill_monitor or not self._main_thread.is_alive():
+                # Why not just put this condition in the while loop condition?
+                # Because this way, we will read the serial and process
+                # messages one last time before exiting. 
+                time_to_exit = True 
+
+            # This line here blocks for a short timeout using pyserial's 
+            # readline() and timeout functionality. Due to the presence of the
+            # timeout inside readline(), it still means we end up "polling" at
+            # a low frequency. 
+            out = self._read()
+
+            if len(out) > 0:
+
+                # Lock main thread while response is being parsed.
+                with self._response_condition:
+                    
+                    # Temporary variable will act as buffer that is progressively
+                    # "consumed" as the message is processed left-to-right.
+                    temp = out
+                    while len(temp) >=4:
+
+                        # Find soonest of "R" or "S" 
+                        next_r_idx = temp.find(b"R")
+                        next_s_idx = temp.find(b"S")
+                        if next_r_idx == -1 and next_s_idx == -1:
+                            next_msg_idx = -1 
+                        elif next_r_idx == -1:
+                            next_msg_idx = next_s_idx
+                        elif next_s_idx == -1:
+                            next_msg_idx = next_r_idx
+                        else:
+                            next_msg_idx = min(next_r_idx, next_s_idx)
+
+
+                        if next_msg_idx == -1:
+                            # No message start found, exit loop
+                            break
+                        else:
+                            # Go to next msg_idx
+                            temp = temp[next_msg_idx:]
+
+                            # Read first three characters, check if valid msg
+                            msg_key = temp[0:3]
+                            temp = temp[3:]
+                            if msg_key in self._r_format_dict:
+                                try:
+                                    field_values, end_idx = self.packer.unpack(
+                                        temp, self._r_format_dict[msg_key]
+                                    )
+                                    self._response_container[msg_key] = field_values
+
+                                    # Signal to main thread that a response is
+                                    # ready.
+                                    self._response_condition.notify()
+
+                                    # Send to callback dispatcher thread
+                                    self._msg_queue.put((msg_key, field_values))
+
+                                    # Go to end of message.
+                                    temp = temp[end_idx+1:]
+                                except Exception:
+                                    if self.verbose:
+                                        print("Message parsing error occured.")
+                                        print(traceback.format_exc())
+
+            if time_to_exit:
+                self._msg_queue.put(None) # Signals CB dispatcher to exit.
+                break # Exits this thread.
+
+    def _cb_dispatcher(self):
+        """
+        CALLBACK DISPATCHER THREAD 
+
+        Thread which executes callbacks by watching a queue of messages received
+        from the firmware.
+
+        This thread will shutdown when it receives a 'None' on the queue.
+        """
+        while True:
+            # Waits 
+            msg = self._msg_queue.get()
+            if msg is None:
+                break # Shut down the thread.
+            else: 
+                msg_key, field_values = msg
+
+                # Check if any callbacks are registered for this specific msg
+                if msg_key in self._callbacks.keys():
+                    cb_list = self._callbacks[msg_key]
+                    for cb in cb_list:
+                        cb(*field_values)  # Execute the callback
 
     def _send(self, message: bytes):
         """
@@ -168,92 +254,24 @@ class UwbModule(object):
             print(str(out)[2:-1])
         return out
 
-    def _serial_monitor(self):
+                        
+    def _create_log_file(self):
+        # Current date and time for logging
+        temp = self.get_id()
+        self.id = temp["id"]
+        temp = datetime.now()
+        now = temp.strftime("%d_%m_%Y_%H_%M_%S")
+        self._log_filename = "datasets/log_" + now + "_ID" + str(self.id) + ".txt"
+
+
+    def close(self):
         """
-        Continuously monitors the serial port, watching for official messages.
-        If an official message is detected, it is extracted and stored in a queue.
+        Proper shutdown of this module. Note that even if the object does not
+        exist anymore in the main thread, the two internal threads will
+        continue to exist unless this method is called or the main thread exits.
         """
-        time_to_exit = False
-        while True:
 
-            if self._kill_monitor or not self._main_thread.is_alive():
-                # Why not just put this condition in the while loop condition?
-                # Because this way, we will read the serial and process
-                # messages one last time before exiting. 
-                time_to_exit = True 
-
-            # This line here blocks for a short timeout using pyserial's 
-            # readline() and timeout functionality. Due to the presence of the
-            # timeout inside readline(), it still means we end up "polling" at
-            # a low frequency. 
-            out = self._read()
-
-            if len(out) > 0:
-
-                # Find all messages in the string (might be slow)
-                # TODO: there is probably a faster way to do this. For example,
-                # we could check for just "C", "R", or "S" i.e. the message
-                # beginnings. Although this increases the likelihood of these
-                # getting detected randomly in a byte field. Actually, theres
-                # even the veeeeerry slight possibility that a full command
-                # prefix of the form C02 or something shows up in a byte field.
-                # To get around this, the message packer will have to report
-                # the end of the message.
-
-                # TODO: when having repeated message keys, the second one will 
-                # be missed. 
-                msg_idxs = [
-                    out.find(msg_key)
-                    for msg_key in self._r_format_dict.keys()
-                    if msg_key in out
-                ]
-                msg_idxs.sort()
-
-                # Extract all the messages and parse them
-                if len(msg_idxs) > 0:
-                    with self._response_condition:
-                        for idx in msg_idxs:
-                            temp = out[idx:]
-                            msg_key = temp[0:3]
-                            try:
-                                field_values = self.packer.unpack(
-                                    temp[3:], self._r_format_dict[msg_key]
-                                )
-                                self._response_container[msg_key] = field_values
-                                self._response_condition.notify()
-                                self._msg_queue.put((msg_key, field_values))
-                            except Exception:
-                                if self.verbose:
-                                    print("Message parsing error occured.")
-                                    print(traceback.format_exc())
-                    
-
-            if time_to_exit:
-                self._msg_queue.put(None) # Signals CB dispatcher to exit.
-                break # Exits this thread.
-
-    def _cb_dispatcher(self):
-        """
-        Thread which executes callbacks by watching a message queue from the 
-        firmware.
-
-        This thread will shutdown when either the main thread dies or this 
-        object's close() method is called, and if the queue is empty.
-        """
-        while True:
-            # Waits 
-            msg = self._msg_queue.get()
-            if msg is None:
-                break # Shut down the read.
-            else: 
-                msg_key, field_values = msg
-
-                # Check if any callbacks are registered for this specific msg
-                if msg_key in self._callbacks.keys():
-                    cb_list = self._callbacks[msg_key]
-                    for cb in cb_list:
-                        cb(*field_values)  # Execute the callback
-            
+        self._kill_monitor = True       
 
     def register_callback(self, msg_key: str, cb_function):
         """
@@ -279,19 +297,6 @@ class UwbModule(object):
                 print("This callback is not registered.")
         else:
             print("No callbacks registered for this key.")
-
-    def _execute_command(self, command_key: str, response_key: str, *args):
-        command_key = command_key.encode(self._encoding)
-        response_key = response_key.encode(self._encoding)
-        with self._response_condition:
-            self._response_container[response_key] = None
-            msg = self.packer.pack(args, self._c_format_dict[command_key])
-            msg = command_key + msg
-            self._send(msg)
-            self._response_condition.wait(self.timeout)
-            response = self._response_container[response_key]
-
-        return response
 
     def output(self, data):
         """
@@ -326,6 +331,19 @@ class UwbModule(object):
     ############################################################################
     ########################## COMMAND IMPLEMENTATIONS #########################
     ############################################################################
+    def _execute_command(self, command_key: str, response_key: str, *args):
+        command_key = command_key.encode(self._encoding)
+        response_key = response_key.encode(self._encoding)
+        with self._response_condition:
+            self._response_container[response_key] = None
+            msg = self.packer.pack(args, self._c_format_dict[command_key])
+            msg = command_key + msg
+            self._send(msg)
+            self._response_condition.wait(self.timeout)
+            response = self._response_container[response_key]
+
+        return response
+
     def set_idle(self):
         """
         Sets the module to be idle/inactive.
@@ -580,7 +598,7 @@ class UwbModule(object):
         for i, frame in enumerate(frames):
             indexed_frame = struct.pack("<B", num_msg - i - 1) + frame
             response = self._execute_command(msg_key, rsp_key, indexed_frame)
-            #//sleep(0.001)
+            sleep(0.1)
         if response is None:
             return False
         else:

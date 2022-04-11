@@ -1,3 +1,4 @@
+from random import random
 from pyuwb.uwbmodule import UwbModule, find_uwb_serial_ports
 from itertools import combinations
 import pytest
@@ -78,7 +79,6 @@ def test_twr_callback():
         range_data = uwb1.do_twr(
             target_id=neighbor_id, meas_at_target=True, mult_twr=False
         )
-        assert range_data["range"] != 0.0
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
@@ -102,7 +102,6 @@ def test_mult_twr_callback():
         range_data = uwb1.do_twr(
             target_id=neighbor_id, meas_at_target=True, mult_twr=True
         )
-        assert range_data["range"] != 0.0
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
@@ -158,7 +157,7 @@ def test_passive_listening():
         range_data = uwb1.do_twr(
             target_id=neighbor_id, meas_at_target=False, mult_twr=False
         )
-        assert range_data["range"] != 0.0
+
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
@@ -260,8 +259,8 @@ def test_long_message():
 
     test_msg = {
     "t": 3.14159,
-    "x":[1.0]*15,
-    "P":[[1.0]*i for i in range(1,15+1)],
+    "x":[1.0]*15*4,
+    "P":[[random()]*i for i in range(1,15*4+1)],
     }
     data = msgpack.packb(test_msg)
     modules[0].broadcast(data)

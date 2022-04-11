@@ -42,7 +42,7 @@ class IntField:
 
     @staticmethod
     def unpack(msg: bytes, next_key_idx: int) -> int:
-        return int(msg[:next_key_idx].decode(encoding)), next_key_idx + 1
+        return int(msg[:next_key_idx].decode(encoding)), next_key_idx
 
 
 class BoolField:
@@ -55,7 +55,7 @@ class BoolField:
         if next_key_idx != 1:
             raise RuntimeError("Bool field is more than 1 byte..")
 
-        return bool(msg[:next_key_idx].decode(encoding)), next_key_idx + 1
+        return bool(msg[:next_key_idx].decode(encoding)), next_key_idx
 
 
 class StringField:
@@ -65,7 +65,7 @@ class StringField:
 
     @staticmethod
     def unpack(msg: bytes, next_key_idx: int) -> str:
-        return msg[:next_key_idx].decode(encoding), next_key_idx + 1
+        return msg[:next_key_idx].decode(encoding), next_key_idx
 
 
 class FloatField:
@@ -75,7 +75,7 @@ class FloatField:
 
     @staticmethod
     def unpack(msg: bytes, next_key_idx: int) -> float:
-        return float(msg[:next_key_idx].decode(encoding)), next_key_idx + 1
+        return float(msg[:next_key_idx].decode(encoding)), next_key_idx
 
 
 class ByteField:
@@ -88,54 +88,70 @@ class ByteField:
     def unpack(msg: bytes, next_key_idx: int) -> bytes:
         fieldlen = struct.unpack("<H", msg[:2])
 
-        return msg[2 : 2 + fieldlen[0]], 2 + fieldlen[0] + 1
+        return msg[2 : 2 + fieldlen[0]], 2 + fieldlen[0]
 
 
 class Packer:
-    def __init__(self, seperator: str = "|", terminator: str = "\r"):
-        self._sep = seperator.encode(encoding)
-        self._eol = terminator.encode(encoding)
+    def __init__(self, separator: str = "|", terminator: str = "\r"):
+        self._separator = separator.encode(encoding)
+        self._terminator = terminator.encode(encoding)
 
     def pack(self, field_values: List[Any], field_types: List[Field]) -> bytes:
         msg = b""
         for i, val in enumerate(field_values):
-            msg += self._sep + field_types[i].pack(val)
-        msg += self._eol
+            msg += self._separator + field_types[i].pack(val)
 
-        return msg  # Dont include initial seperator
+        msg += self._terminator
+
+        return msg  # Dont include initial separator
 
     def unpack(self, msg: bytes, field_types: List[Field]):
 
         # If no expected fields, return empty.
         results = []
         if field_types is None or len(field_types) == 0:
-            return results
+            return results, msg.find(b'\r')
 
         # There will always be a seperator character at the beginning.
         # Remove it.
-        msg = msg[1:]
-
+        og_msg = msg
+        msg_end_idx = 0
         for field in field_types:
 
-            # Find the "soonest" key character (seperator or terminator)
-            next_sep = msg.find(self._sep)
-            next_eol = msg.find(self._eol)
-            if next_sep == -1 and next_eol == -1:
-                raise RuntimeError(
-                    "No seperator or terminator detected in received message."
-                )
-            elif next_sep == -1:
-                next_key_idx = next_eol
-            elif next_eol == -1:
-                next_key_idx = next_sep
-            else:
-                next_key_idx = min(next_sep, next_eol)
+            # At this point, current pointer will be at a '|', so move forward by
+            # 1 to be at the first char of the field.
+            msg = msg[1:]
+            msg_end_idx += 1
+
+            next_key_idx = self.get_next_key_char(msg)
 
             # Unpack the value
-            value, next_field_idx = field.unpack(msg, next_key_idx)
+            value, next_key_idx = field.unpack(msg, next_key_idx)
             results.append(value)
 
             # Move through the message to the next field.
-            msg = msg[next_field_idx:]
+            msg = msg[next_key_idx:]
+            msg_end_idx += next_key_idx
 
-        return results
+        # If message format was good, we should always land on a '\r' at the end.
+        if og_msg[msg_end_idx] != b'\r'[0]:
+            RuntimeError("Error in message terminator detection.")
+
+        return results, msg_end_idx
+    
+    def get_next_key_char(self, msg: bytes):
+        # Find the "soonest" key character (seperator or terminator)
+        next_sep = msg.find(self._separator)
+        next_eol = msg.find(self._terminator)
+        if next_sep == -1 and next_eol == -1:
+            raise RuntimeError(
+                "No seperator or terminator detected in received message."
+            )
+        elif next_sep == -1:
+            next_key_idx = next_eol
+        elif next_eol == -1:
+            next_key_idx = next_sep
+        else:
+            next_key_idx = min(next_sep, next_eol)
+
+        return next_key_idx
