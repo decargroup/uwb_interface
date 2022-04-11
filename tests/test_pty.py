@@ -1,6 +1,8 @@
 import os, pty
 import sys
 from time import sleep
+import msgpack 
+import struct
 
 sys.path.append(os.path.dirname(sys.path[0]))
 from pyuwb.uwbmodule import UwbModule
@@ -204,5 +206,48 @@ def test_firmware_tests():
     assert data["parsing_test"] == True
 
 
+
+class MessageTracker:
+    def callback(self, msg):
+        self.msg = msg
+
+
+def test_long_message():
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+
+
+    test_msg = {
+    "t": 3.14159,
+    "x":[1.0]*5,
+    "P":[[1.0]*i for i in range(1,5+1)],
+    }
+    data = msgpack.packb(test_msg)
+
+    max_frame_len = 100
+    tracker = MessageTracker()
+    uwb = UwbModule(port, timeout=5, verbose=True)
+    uwb.register_message_callback(tracker.callback)
+    uwb._max_frame_len = 100 
+
+
+    frame_len = max_frame_len - 20 
+    num_msg = int(len(data)/frame_len) + 1
+    frames = [data[i:i+frame_len] for i in range(0, len(data), frame_len)]
+
+    indexed_frames = []
+    for i, frame in enumerate(frames):
+        indexed_frames.append(struct.pack("<B", num_msg - i - 1) + frame)
+
+    responses = [b"S06|" + struct.pack("<H", len(frame)) + frame + b"\r\n" for frame in indexed_frames]
+    for response in responses:
+        os.write(device, response)
+    
+    uwb.broadcast(data)
+    assert tracker.msg == data
+
+
+
+
 if __name__ == "__main__":
-    test_get_id()
+    test_long_message()

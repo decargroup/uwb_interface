@@ -598,7 +598,7 @@ class UwbModule(object):
         for i, frame in enumerate(frames):
             indexed_frame = struct.pack("<B", num_msg - i - 1) + frame
             response = self._execute_command(msg_key, rsp_key, indexed_frame)
-            sleep(0.1)
+
         if response is None:
             return False
         else:

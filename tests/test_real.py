@@ -259,8 +259,8 @@ def test_long_message():
 
     test_msg = {
     "t": 3.14159,
-    "x":[1.0]*15*4,
-    "P":[[random()]*i for i in range(1,15*4+1)],
+    "x":[1.0]*15,
+    "P":[[random()]*i for i in range(1,15+1)],
     }
     data = msgpack.packb(test_msg)
     modules[0].broadcast(data)
