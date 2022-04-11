@@ -24,9 +24,9 @@ def test_all_types():
 
     packer = Packer()
     msg = packer.pack(test_values, test_types)
-    values_unpacked = packer.unpack(test_unpack, test_types)
+    values_unpacked = packer.unpack(test_unpack, test_types)[0]
     assert values_unpacked == test_values
-    assert msg.split(packer._sep)[:3] == test_unpack.split(packer._sep)[:3]
+    assert msg.split(packer._separator)[:3] == test_unpack.split(packer._separator)[:3]
 
 
 if __name__ == "__main__":
