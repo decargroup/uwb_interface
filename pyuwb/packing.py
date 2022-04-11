@@ -15,7 +15,7 @@ class Field(ABC):
        of that type.
 
     In the unpack method, the index of the next key character will also be
-    supplied. A key character is either a field seperator or a message
+    supplied. A key character is either a field separator or a message
     terminator. The implementation of the unpack method can therefore use the
     location of the key character to detect how many bytes to read. As a
     second output argument, it is mandatory to provide the index of the first
@@ -35,7 +35,7 @@ class Field(ABC):
         pass
 
 
-class IntField:
+class IntField(Field):
     @staticmethod
     def pack(value: int) -> bytes:
         return str(value).encode(encoding)
@@ -45,7 +45,7 @@ class IntField:
         return int(msg[:next_key_idx].decode(encoding)), next_key_idx + 1
 
 
-class BoolField:
+class BoolField(Field):
     @staticmethod
     def pack(value: bool) -> bytes:
         return str(int(value)).encode(encoding)
@@ -58,7 +58,7 @@ class BoolField:
         return bool(msg[:next_key_idx].decode(encoding)), next_key_idx + 1
 
 
-class StringField:
+class StringField(Field):
     @staticmethod
     def pack(value: str) -> bytes:
         return value.encode(encoding)
@@ -68,7 +68,7 @@ class StringField:
         return msg[:next_key_idx].decode(encoding), next_key_idx + 1
 
 
-class FloatField:
+class FloatField(Field):
     @staticmethod
     def pack(value: float) -> bytes:
         return struct.pack("<f", value)
@@ -78,7 +78,7 @@ class FloatField:
         return float(msg[:next_key_idx].decode(encoding)), next_key_idx + 1
 
 
-class ByteField:
+class ByteField(Field):
     @staticmethod
     def pack(value: bytes) -> bytes:
         num_bytes = len(value)
@@ -92,8 +92,8 @@ class ByteField:
 
 
 class Packer:
-    def __init__(self, seperator: str = "|", terminator: str = "\r"):
-        self._sep = seperator.encode(encoding)
+    def __init__(self, separator: str = "|", terminator: str = "\r"):
+        self._sep = separator.encode(encoding)
         self._eol = terminator.encode(encoding)
 
     def pack(self, field_values: List[Any], field_types: List[Field]) -> bytes:
@@ -102,7 +102,7 @@ class Packer:
             msg += self._sep + field_types[i].pack(val)
         msg += self._eol
 
-        return msg  # Dont include initial seperator
+        return msg  # Dont include initial separator
 
     def unpack(self, msg: bytes, field_types: List[Field]):
 
@@ -111,18 +111,18 @@ class Packer:
         if field_types is None or len(field_types) == 0:
             return results
 
-        # There will always be a seperator character at the beginning.
+        # There will always be a separator character at the beginning.
         # Remove it.
         msg = msg[1:]
 
         for field in field_types:
 
-            # Find the "soonest" key character (seperator or terminator)
+            # Find the "soonest" key character (separator or terminator)
             next_sep = msg.find(self._sep)
             next_eol = msg.find(self._eol)
             if next_sep == -1 and next_eol == -1:
                 raise RuntimeError(
-                    "No seperator or terminator detected in received message."
+                    "No separator or terminator detected in received message."
                 )
             elif next_sep == -1:
                 next_key_idx = next_eol

@@ -96,9 +96,9 @@ class UwbModule(object):
         self._c_format_dict = {
             key.encode(self._encoding): val for key, val in self._c_format_dict.items()
         }
-        self.packer = Packer(seperator="|", terminator="\r")
+        self.packer = Packer(separator="|", terminator="\r")
 
-        # Start a seperate thread for serial port monitoring
+        # Start a separate thread for serial port monitoring
         self._kill_monitor = False
         self._msg_queue = queue.Queue()
         self._callbacks = {}
