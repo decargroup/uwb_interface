@@ -185,7 +185,7 @@ def test_firmware_tests():
 
 
 class MessageTracker:
-    def callback(self, msg):
+    def callback(self, msg, is_valid):
         self.msg = msg
 
 

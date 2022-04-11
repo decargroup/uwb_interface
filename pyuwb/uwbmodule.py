@@ -630,14 +630,16 @@ class LongMessageReceiver:
         print("GOT THE FOLLOWING: " + str(frames_remaining))
         self._long_msg += msg[1:]
 
+        is_valid = True
         if self._exp_frames_remaining is None:
             self._exp_frames_remaining = frames_remaining
         elif (self._exp_frames_remaining - 1) != frames_remaining:
             print("WARNING: A frame was missed in a frame sequence.")
+            is_valid = False
         else:
             self._exp_frames_remaining = frames_remaining
 
         if frames_remaining == 0:
-            self._cb_function(self._long_msg)
+            self._cb_function(self._long_msg, is_valid)
             self._long_msg = b''
             self._exp_frames_remaining = None

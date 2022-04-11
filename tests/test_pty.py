@@ -208,7 +208,7 @@ def test_firmware_tests():
 
 
 class MessageTracker:
-    def callback(self, msg):
+    def callback(self, msg, is_valid):
         self.msg = msg
 
 
@@ -226,7 +226,7 @@ def test_long_message():
 
     max_frame_len = 100
     tracker = MessageTracker()
-    uwb = UwbModule(port, timeout=5, verbose=True)
+    uwb = UwbModule(port, timeout=1, verbose=True)
     uwb.register_message_callback(tracker.callback)
     uwb._max_frame_len = 100 
 
