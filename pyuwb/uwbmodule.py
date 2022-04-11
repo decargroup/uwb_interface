@@ -1,9 +1,21 @@
+import struct
 import serial
 from serial.tools import list_ports
 from time import time, sleep
 from datetime import datetime
-from threading import Thread
-import json
+import threading
+import queue
+import msgpack
+import traceback
+from typing import List, Any
+from .packing import (
+    Packer,
+    IntField,
+    BoolField,
+    StringField,
+    FloatField,
+    ByteField,
+)
 
 
 def find_uwb_serial_ports():
@@ -46,29 +58,28 @@ class UwbModule(object):
 
     _encoding = "utf-8"
     _c_format_dict = {
-        "C00": "",
-        "C01": "",
-        "C02": "",
-        "C03": "",
-        "C04": "bool",
-        "C05": "int,bool,int",
-        "C06": "str",
+        "C00": [],
+        "C01": [],
+        "C02": [],
+        "C03": [IntField, StringField, BoolField, FloatField, ByteField],
+        "C04": [BoolField],
+        "C05": [IntField, BoolField, BoolField],
+        "C06": [ByteField],
+        "C07": [],
     }
     _r_format_dict = {
-        "R00": "",
-        "R01": "int",
-        "R02": "",
-        "R03": "int",
-        "R04": "",
-        "R05": "int,float,int,int,int,int,int,int,float,float",
-        "R06": "str",
-        "S01": "int,int,int,int,int,int,int,int,int,int,int,float,float,float,float,float",
-        "S05": "int,float,int,int,int,int,int,int,float,float",
+        "R00": [],
+        "R01": [IntField],
+        "R02": [],
+        "R03": [IntField, IntField, StringField, BoolField, FloatField, ByteField],
+        "R04": [],
+        "R05": [IntField, FloatField] + [IntField]*6 + [FloatField]*2,
+        "R06": [],
+        "R07": [IntField],
+        "S01": [IntField]*11 + [FloatField]*5,
+        "S05": [IntField, FloatField] + [IntField]*6 + [FloatField]*2,
+        "S06": [ByteField],
     }
-    _format_dict = {**_c_format_dict, **_r_format_dict}  # merge both dicts
-    _sep = "|"
-    _eol = "\r"
-    _eol_encoded = _eol.encode(_encoding)
 
     def __init__(self, port, baudrate=19200, timeout=0.1, verbose=False, log=False):
         """
@@ -79,51 +90,156 @@ class UwbModule(object):
         self.timeout = timeout
         self.logging = log
 
-        # Start a seperate thread for serial port monitoring
+        self._r_format_dict = {
+            key.encode(self._encoding): val for key, val in self._r_format_dict.items()
+        }
+        self._c_format_dict = {
+            key.encode(self._encoding): val for key, val in self._c_format_dict.items()
+        }
+        self.packer = Packer(separator="|", terminator="\r")
+
+        # Start a separate thread for serial port monitoring
         self._kill_monitor = False
-        self._msg_queue = []
+        self._msg_queue = queue.Queue()
         self._callbacks = {}
         self._response_container = {}
-        self._monitor_thread = Thread(
-            target=self._serial_monitor, name="Serial Monitor", daemon=True
+        self._response_condition = threading.Condition()
+        self._main_thread = threading.main_thread()
+
+        self._monitor_thread = threading.Thread(
+            target=self._serial_monitor, name="Serial Monitor"
         )
         self._monitor_thread.start()
-        self._dispatcher_thread = Thread(
-            target=self._cb_dispatcher, name="Callback Dispatcher", daemon=True
+
+        self._dispatcher_thread = threading.Thread(
+            target=self._cb_dispatcher, name="Callback Dispatcher"
         )
         self._dispatcher_thread.start()
 
         # Logging
-        self._is_logfile_setup = False
+        self._log_filename = None
 
-    def _create_log_file(self):
-        # Current date and time for logging
-        temp = self.get_id()
-        self.id = temp["id"]
-        temp = datetime.now()
-        self._now = temp.strftime("%d_%m_%Y_%H_%M_%S")
-        self._log_filename = "datasets/log_" + self._now + "_ID" + str(self.id) + ".txt"
+        # Messaging internal variables.
+        self._max_frame_len = None
+        self._receivers = {}
 
-    def close(self):
+    def _serial_monitor(self):
         """
-        Proper shutdown of this module. Note that even if the object does not
-        exist anymore in the main thread, the two internal threads will
-        continue to exist unless this method is called.
+        SERIAL MONITOR THREAD
+
+        Continuously monitors the serial port, watching for official messages.
+        If an official message is detected, it is extracted and stored in a queue.
         """
+        time_to_exit = False
+        while True:
 
-        self._kill_monitor = True
+            if self._kill_monitor or not self._main_thread.is_alive():
+                # Why not just put this condition in the while loop condition?
+                # Because this way, we will read the serial and process
+                # messages one last time before exiting. 
+                time_to_exit = True 
 
-    def _send(self, message):
+            # This line here blocks for a short timeout using pyserial's 
+            # readline() and timeout functionality. Due to the presence of the
+            # timeout inside readline(), it still means we end up "polling" at
+            # a low frequency. 
+            out = self._read()
+
+            if len(out) > 0:
+
+                # Lock main thread while response is being parsed.
+                with self._response_condition:
+                    
+                    # Temporary variable will act as buffer that is progressively
+                    # "consumed" as the message is processed left-to-right.
+                    temp = out
+                    while len(temp) >=4:
+
+                        # Find soonest of "R" or "S" 
+                        next_r_idx = temp.find(b"R")
+                        next_s_idx = temp.find(b"S")
+                        if next_r_idx == -1 and next_s_idx == -1:
+                            next_msg_idx = -1 
+                        elif next_r_idx == -1:
+                            next_msg_idx = next_s_idx
+                        elif next_s_idx == -1:
+                            next_msg_idx = next_r_idx
+                        else:
+                            next_msg_idx = min(next_r_idx, next_s_idx)
+
+
+                        if next_msg_idx == -1:
+                            # No message start found, exit loop
+                            break
+                        else:
+                            # Go to next msg_idx
+                            temp = temp[next_msg_idx:]
+
+                            # Read first three characters, check if valid msg
+                            msg_key = temp[0:3]
+                            temp = temp[3:]
+                            if msg_key in self._r_format_dict:
+                                try:
+                                    field_values, end_idx = self.packer.unpack(
+                                        temp, self._r_format_dict[msg_key]
+                                    )
+                                    self._response_container[msg_key] = field_values
+
+                                    # Signal to main thread that a response is
+                                    # ready.
+                                    self._response_condition.notify()
+
+                                    # Send to callback dispatcher thread
+                                    self._msg_queue.put((msg_key, field_values))
+
+                                    # Go to end of message.
+                                    temp = temp[end_idx+1:]
+                                except Exception:
+                                    if self.verbose:
+                                        print("Message parsing error occured.")
+                                        print(traceback.format_exc())
+
+            if time_to_exit:
+                self._msg_queue.put(None) # Signals CB dispatcher to exit.
+                break # Exits this thread.
+
+    def _cb_dispatcher(self):
+        """
+        CALLBACK DISPATCHER THREAD 
+
+        Thread which executes callbacks by watching a queue of messages received
+        from the firmware.
+
+        This thread will shutdown when it receives a 'None' on the queue.
+        """
+        while True:
+            # Waits 
+            msg = self._msg_queue.get()
+            if msg is None:
+                break # Shut down the thread.
+            else: 
+                msg_key, field_values = msg
+
+                # Check if any callbacks are registered for this specific msg
+                if msg_key in self._callbacks.keys():
+                    cb_list = self._callbacks[msg_key]
+                    for cb in cb_list:
+                        cb(*field_values)  # Execute the callback
+
+    def _send(self, message: bytes):
         """
         Send an arbitrary string to the UWB device.
         """
         if isinstance(message, str):
-            if self.verbose:
-                print("<< " + message)
-            message = message.encode(self._encoding)
+            message = message.encode(self._encoding)  # TODO: should remove this.
+
+        if self.verbose:
+            print("<< ", end="")
+            print(str(message)[2:-1])
+
         self.device.write(message)
 
-    def _read(self):
+    def _read(self) -> bytes:
         """
         Read arbitrary string from UWB device.
         """
@@ -132,74 +248,48 @@ class UwbModule(object):
         # arrive over USB. However, once we do recieve a message, we immediately
         # call read(device.in_waiting) to also read whatever else is in the
         # input buffer.
-        out = self.device.readline() + self.device.read(self.device.in_waiting)
-        out = out.decode(self._encoding, errors="ignore")
-        if self.verbose:
+        out = self.device.read_until(b'\r\n') + self.device.read(self.device.in_waiting)
+        if self.verbose and len(out) > 0:
             print(">> ", end="")
-            print(out, end="")
+            print(str(out)[2:-1])
         return out
 
-    def _serial_monitor(self):
+                        
+    def _create_log_file(self):
+        # Current date and time for logging
+        temp = self.get_id()
+        self.id = temp["id"]
+        temp = datetime.now()
+        now = temp.strftime("%d_%m_%Y_%H_%M_%S")
+        self._log_filename = "datasets/log_" + now + "_ID" + str(self.id) + ".txt"
+
+
+    def close(self):
         """
-        Continuously monitors the serial port, watching for official messages.
-        If an official message is detected, it is extracted and stored in a queue.
+        Proper shutdown of this module. Note that even if the object does not
+        exist anymore in the main thread, the two internal threads will
+        continue to exist unless this method is called or the main thread exits.
         """
 
-        while not self._kill_monitor:
-            out = self._read()
+        self._kill_monitor = True       
 
-            if len(out) > 0:
-
-                # Find all messages in the string (might be slow)
-                msg_idxs = [
-                    out.find(msg_key)
-                    for msg_key in self._r_format_dict.keys()
-                    if msg_key in out
-                ]
-                msg_idxs.sort()
-
-                # Extract all the messages and parse them
-                if len(msg_idxs) > 0:
-                    for idx in msg_idxs:
-                        temp = out[idx:]
-                        idx_end = temp.find(self._eol)
-                        # try:
-                        parsed_msg = self._parse_message(temp[:idx_end])
-                        self._response_container[parsed_msg[0]] = parsed_msg
-                        self._msg_queue.append(parsed_msg)
-                        # except:
-                        # if self.verbose:
-                        # print("Message parsing error occured.")
-
-    def _cb_dispatcher(self):
-        while not self._kill_monitor:
-            if len(self._msg_queue) > 0:
-                parsed_msg = self._msg_queue.pop(0)
-
-                # Check if any callbacks are registered for this specific msg
-                if parsed_msg[0] in self._callbacks.keys():
-                    cb_list = self._callbacks[parsed_msg[0]]
-                    for cb in cb_list:
-                        cb(*parsed_msg[1:])  # Execute the callback
-            else:
-                sleep(0.001)  # To prevent high CPU usage
-                # TODO: look into threading events to avoid busywait
-
-    def register_callback(self, msg_key, cb_function):
+    def register_callback(self, msg_key: str, cb_function):
         """
         Registers a callback function to be executed whenever a specific
         message key is received over serial.
         """
+        msg_key = msg_key.encode(self._encoding)
         if msg_key in self._callbacks.keys():
             self._callbacks[msg_key].append(cb_function)
         else:
             self._callbacks[msg_key] = [cb_function]
 
-    def unregister_callback(self, msg_key, cb_function):
+    def unregister_callback(self, msg_key: str, cb_function):
         """
         Removes a callback function from the execution list corresponding to
         a specific message key.
         """
+        msg_key = msg_key.encode(self._encoding)
         if msg_key in self._callbacks.keys():
             if cb_function in self._callbacks[msg_key]:
                 self._callbacks[msg_key].remove(cb_function)
@@ -208,113 +298,51 @@ class UwbModule(object):
         else:
             print("No callbacks registered for this key.")
 
-    def _check_field_format(self, specifier: str, field):
+    def output(self, data):
         """
-        Checks to see if a particular field complies with its format specifier.
+        Outputs data by printing and saving to a log file.
+
+        PARAMETERS:
+        -----------
+        data: Any
+            data to be stored and printed
         """
-        specifier = specifier.strip()
-        if specifier == "int":
-            return isinstance(field, int)
-        if specifier == "float":
-            return isinstance(field, float)
-        if specifier == "str":
-            return isinstance(field, str)
-        if specifier == "bool":
-            return isinstance(field, bool)
-        if specifier == "uint":
-            return isinstance(field, int) and field >= 0
+        print(str(data))
 
-    def _build_message(self, msg_key: str, fieldvalues: list = None):
+        if self.logging is True:
+            self.log(data)
+
+    def log(self, data):
         """
-        Constructs the message string and checks if the format is correct.
+        Logs data by saving to a log file.
+
+        PARAMETERS:
+        -----------
+        data: Any
+            data to be stored and printed
         """
-        # Check to see if all the fieldvalues match with the message format
-        if len(self._format_dict[msg_key]) > 0:
-            fieldtypes = self._format_dict[msg_key].split(",")
-            for i, t in enumerate(fieldtypes):
-                if not self._check_field_format(t, fieldvalues[i]):
-                    raise RuntimeError("Incorrect message format.")
-
-        # Assemble the message
-        msg = msg_key
-        converted = []
-        if fieldvalues is not None:
-
-            # Perform type-specific conversion on each field.
-            for field in fieldvalues:
-                if isinstance(field, bool):
-                    converted.append(str(int(field)))
-                elif isinstance(field, int):
-                    converted.append(str(field))
-                elif isinstance(field, float):
-                    # TODO: needs to be replaced by float_to_hex
-                    converted.append(str(field))
-                elif isinstance(field, str):
-                    converted.append(field)
-
-        if len(converted) > 0:
-            msg += self._sep + self._sep.join(converted)
-
-        msg += "\r"
-        return msg
-
-    def _parse_message(self, msg, msg_key=None):
-        """
-        Parses a pure string message into a list of values, where each value
-        is converted to the type as specified in _format_dict[msg_key]
-
-        If no msg_key is provided, it will automatically be detected as the
-        first field in the message.
-        """
-
-        if not isinstance(msg, str):
-            msg = str(msg)
-
-        fields = msg.split(self._sep)
-        received_key = fields[0]
-        if msg_key is None:
-            msg_key = received_key
-
-        format = self._format_dict[msg_key].split(",")
-        results = [received_key]
-        if format[0] == "":
-            return results
-
-        for i in range(len(format)):
-            # This can potentially throw errors if value is not convertible
-            # to say, a float.
-            if i + 1 <= len(fields) - 1:
-                value = fields[i + 1]
-                if format[i] == "int":
-                    results.append(int(value))
-                elif format[i] == "float":
-                    results.append(float(value))
-                elif format[i] == "bool":
-                    results.append(bool(value))
-                elif format[i] == "str":
-                    results.append(str(value))
-                else:
-                    raise RuntimeError("unsupported format type.")
-            else:
-                results.append(None)
-
-        return results
-
-    def _execute_command(self, command_key, response_key, *args):
-        if self.logging and not self._is_logfile_setup:
+        data = str(data)
+        if self._log_filename is None:
             self._create_log_file()
 
-        self._response_container[response_key] = None
-        msg = self._build_message(command_key, args)
-        self._send(msg)
-        start_time = time()
-        while (
-            self._response_container[response_key] is None
-            and (time() - start_time) < self.timeout
-        ):
-            # TODO: threading package has solutions to avoid this busy wait
-            sleep(0.001)
-        return self._response_container[response_key]
+        with open(self._log_filename, "a") as myfile:
+            myfile.write(data + "\n")
+
+    ############################################################################
+    ########################## COMMAND IMPLEMENTATIONS #########################
+    ############################################################################
+    def _execute_command(self, command_key: str, response_key: str, *args):
+        command_key = command_key.encode(self._encoding)
+        response_key = response_key.encode(self._encoding)
+        with self._response_condition:
+            self._response_container[response_key] = None
+            msg = self.packer.pack(args, self._c_format_dict[command_key])
+            msg = command_key + msg
+            self._send(msg)
+            self._response_condition.wait(self.timeout)
+            response = self._response_container[response_key]
+
+        return response
 
     def set_idle(self):
         """
@@ -329,36 +357,8 @@ class UwbModule(object):
         response = self._execute_command(msg_key, rsp_key)
         if response is None:
             return False
-        elif response[0] == rsp_key:
-            return True
         else:
-            return False
-
-    def output(self, data):
-        """
-        Outputs data by printing and saving to a log file.
-
-        PARAMETERS:
-        -----------
-        data: unspecified
-            data to be stored and printed
-        """
-        data = str(data)
-        print(data)
-        if self.logging is True:
-            with open(self._log_filename, "a") as myfile:
-                myfile.write(data + "\n")
-
-    def log(self, data):
-        """
-        Logs data by printing and saving to a log file.
-
-        PARAMETERS:
-        -----------
-        data: unspecified
-            data to be stored and printed
-        """
-        self.output(data)
+            return True
 
     def get_id(self):
         """
@@ -375,11 +375,11 @@ class UwbModule(object):
         msg_key = "C01"
         rsp_key = "R01"
         response = self._execute_command(msg_key, rsp_key)
-        if response is False or response is None:
-            return {"id": -1, "is_valid": False}
+        if response is None:
+            return {"id": None, "is_valid": False}
         else:
-            self.id = response[1]
-            return {"id": response[1], "is_valid": True}
+            self.id = response[0]
+            return {"id": response[0], "is_valid": True}
 
     def reset(self):
         """
@@ -394,10 +394,8 @@ class UwbModule(object):
         response = self._execute_command(msg_key, rsp_key)
         if response is None:
             return False
-        elif response[0] == rsp_key:
-            return True
         else:
-            return False
+            return True
 
     def do_tests(self):
         """
@@ -413,13 +411,42 @@ class UwbModule(object):
         """
         msg_key = "C03"
         rsp_key = "R03"
-        response = self._execute_command(msg_key, rsp_key)
-        if response is None or response is False:
-            return {"error_id": -1, "is_valid": False}
-        else:
-            return {"error_id": response[1], "is_valid": True}
 
-    def toggle_passive(self, toggle=0):
+        test_dict = {"a": 3.14159, "b": [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]}
+        test_bytes = msgpack.packb(test_dict, use_single_float=True)
+        test_fields = [
+            12345,
+            "the test string",
+            True,
+            1.2345,
+            test_bytes,
+        ]
+        response = self._execute_command(msg_key, rsp_key, *test_fields)
+
+        if response is None:
+            return {
+                "error_id": -1,
+                "is_valid": False,
+                "parsing_test": False,
+            }
+        else:
+            if (
+                test_fields[0] != response[1]
+                or test_fields[1] != response[2]
+                or test_fields[2] != response[3]
+                or test_fields[3] != response[4]
+                or test_fields[4] != response[5]
+            ):
+                firmware_parsing_error = False
+            else:
+                firmware_parsing_error = True
+            return {
+                "error_id": response[0],
+                "is_valid": True,
+                "parsing_test": firmware_parsing_error,
+            }
+
+    def toggle_passive(self, toggle=False):
         """
         Toggles the passive listening or "eavesdropping" feature.
 
@@ -437,10 +464,8 @@ class UwbModule(object):
         response = self._execute_command(msg_key, rsp_key, toggle)
         if response is None:
             return False
-        elif response[0] == rsp_key:
-            return True
         else:
-            return False
+            return True
 
     def do_twr(
         self, target_id=1, meas_at_target=False, mult_twr=False, only_range=False
@@ -497,42 +522,124 @@ class UwbModule(object):
         response = self._execute_command(
             msg_key, rsp_key, target_id, meas_at_target, mult_twr
         )
-        if response is False or response is None:
+        if response is None:
             return {"neighbour": 0.0, "range": 0.0, "is_valid": False}
         elif only_range is False:
             return {
-                "neighbour": response[1],
-                "range": response[2],
-                "tx1": response[3],
-                "rx1": response[4],
-                "tx2": response[5],
-                "rx2": response[6],
-                "tx3": response[7],
-                "rx3": response[8],
-                "Pr1": response[9], 
-                "Pr2": response[10], 
+                "neighbour": response[0],
+                "range": response[1],
+                "tx1": response[2],
+                "rx1": response[3],
+                "tx2": response[4],
+                "rx2": response[5],
+                "tx3": response[6],
+                "rx3": response[7],
+                "Pr1": response[8], 
+                "Pr2": response[9], 
                 "is_valid": True,
             }
         else:
-            return {"neighbour": response[1], "range": response[2], "is_valid": True}
+            return {
+                "neighbour": response[0],
+                "range": response[1],
+                "is_valid": True,
+            }
 
-    def broadcast(self, data):
+
+    def get_max_frame_length(self):
         """
-        Broadcast an arbitrary dictionary of data over UWB.
+        Gets the module's ID.
 
         RETURNS:
         --------
-        bool: successfully received response
+        dict with keys:
+            "length": int
+                max frame length (in number of bytes) that the board is
+                configured to send over UWB.
+            "is_valid": bool
+                whether the reported result is valid or an error occurred
         """
+        msg_key = "C07"
+        rsp_key = "R07"
+        response = self._execute_command(msg_key, rsp_key)
+        if response is False or response is None:
+            return {"length": -1, "is_valid": False}
+        else:
+            self.id = response[0]
+            return {"length": response[0], "is_valid": True}
+
+
+    def broadcast(self, data: bytes):
+        """
+        Broadcast string of bytes data over UWB.
+
+        RETURNS:
+        --------
+        bool: successfully sent
+        """
+        if not isinstance(data, bytes):
+            raise RuntimeError("Data must be of bytes type.")
+
+        if self._max_frame_len is None:
+            len_data = self.get_max_frame_length()
+            if len_data["is_valid"]:
+                self._max_frame_len = len_data["length"]
+            else: 
+                RuntimeError("Unable to detect the max supported UWB frame length.")
+
         msg_key = "C06"
         rsp_key = "R06"
 
-        data_serialized = json.dumps(data)
+        # add a small buffer to not hit max frame length exactly.
+        frame_len = self._max_frame_len - 20 
+        num_msg = int(len(data)/frame_len) + 1
+        frames = [data[i:i+frame_len] for i in range(0, len(data), frame_len)]
 
-        response = self._execute_command(msg_key, rsp_key, data_serialized)
+        for i, frame in enumerate(frames):
+            indexed_frame = struct.pack("<B", num_msg - i - 1) + frame
+            response = self._execute_command(msg_key, rsp_key, indexed_frame)
+
         if response is None:
             return False
-        elif response[0] == rsp_key:
-            return True
         else:
-            return False
+            return True
+
+    def register_message_callback(self, cb_function):
+        receiver = LongMessageReceiver(cb_function)
+        self._receivers[id(cb_function)] = receiver
+        self.register_callback("S06", receiver.frame_callback)
+        
+    def unregister_message_callback(self, cb_function):
+        if not id(cb_function) in self._receivers.keys():
+            print("This callback is not registered.")
+
+        receiver  = self._receivers[id(cb_function)]
+        self.unregister_callback("S06", receiver.frame_callback)
+
+class LongMessageReceiver:
+    def __init__(self, cb_function) -> None:
+        self._long_msg = b''
+        self._cb_function = cb_function
+        self._exp_frames_remaining = None
+
+    def frame_callback(self, msg):
+
+        # TODO: i believe the line below can be replaced with just msg[0] since
+        # we are only using one byte for this. (no more than 256 frames).
+        frames_remaining = struct.unpack("<B", msg[0:1])[0]
+        print("GOT THE FOLLOWING: " + str(frames_remaining))
+        self._long_msg += msg[1:]
+
+        is_valid = True
+        if self._exp_frames_remaining is None:
+            self._exp_frames_remaining = frames_remaining
+        elif (self._exp_frames_remaining - 1) != frames_remaining:
+            print("WARNING: A frame was missed in a frame sequence.")
+            is_valid = False
+        else:
+            self._exp_frames_remaining = frames_remaining
+
+        if frames_remaining == 0:
+            self._cb_function(self._long_msg, is_valid)
+            self._long_msg = b''
+            self._exp_frames_remaining = None
