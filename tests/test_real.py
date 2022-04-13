@@ -196,14 +196,14 @@ def test_broadcast():
     trackers = [MessageTracker() for uwb in modules[1:]]
 
     for i, uwb in enumerate(modules[1:]):
-        uwb.register_callback("S06",trackers[i].callback)
-
+        uwb.register_message_callback(trackers[i].callback)
+        
     test_msg = b'test\0\r\n|message'
     modules[0].broadcast(test_msg)
     sleep(0.2)
 
     for tracker in trackers:
-        assert tracker.msg[1:] == test_msg
+        assert tracker.msg == test_msg
 
 def test_broadcast_msgpack():
     if len(modules) < 2:
@@ -212,7 +212,7 @@ def test_broadcast_msgpack():
     trackers = [MessageTracker() for uwb in modules[1:]]
 
     for i, uwb in enumerate(modules[1:]):
-        uwb.register_callback("S06",trackers[i].callback)
+        uwb.register_message_callback(trackers[i].callback)
 
     test_msg = {
     "t": 3.14159,
@@ -223,7 +223,7 @@ def test_broadcast_msgpack():
     modules[0].broadcast(data)
     sleep(0.1)
     for tracker in trackers:
-        assert msgpack.unpackb(tracker.msg[1:]) == test_msg
+        assert msgpack.unpackb(tracker.msg) == test_msg
 
 
 def test_message_callback():
