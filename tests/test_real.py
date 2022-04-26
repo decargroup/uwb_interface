@@ -185,7 +185,7 @@ def test_firmware_tests():
 
 
 class MessageTracker:
-    def callback(self, msg, is_valid):
+    def callback(self, msg):
         self.msg = msg
 
 
@@ -226,11 +226,16 @@ def test_broadcast_msgpack():
         assert msgpack.unpackb(tracker.msg[1:]) == test_msg
 
 
+
+class LongMessageTracker:
+    def callback(self, msg, is_valid):
+        self.msg = msg
+
 def test_message_callback():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
-    trackers = [MessageTracker() for uwb in modules[1:]]
+    trackers = [LongMessageTracker() for uwb in modules[1:]]
 
     for i, uwb in enumerate(modules[1:]):
         uwb.register_message_callback(trackers[i].callback)
@@ -251,7 +256,7 @@ def test_long_message():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
-    trackers = [MessageTracker() for uwb in modules[1:]]
+    trackers = [LongMessageTracker() for uwb in modules[1:]]
 
     for i, uwb in enumerate(modules[1:]):
         uwb.register_message_callback(trackers[i].callback)
