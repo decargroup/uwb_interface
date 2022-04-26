@@ -1,6 +1,6 @@
 from random import random
 from pyuwb.uwbmodule import UwbModule, find_uwb_serial_ports
-from itertools import combinations
+import itertools
 import pytest
 from time import sleep
 import msgpack
@@ -26,8 +26,9 @@ def test_twr():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
-    for (uwb1, uwb2) in combinations(modules, 2):
+    for (uwb1, uwb2) in itertools.permutations(modules, 2):
         neighbor_id = uwb2.get_id()["id"]
+        sleep(0.01)
         range_data = uwb1.do_twr(target_id=neighbor_id)
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
@@ -36,8 +37,9 @@ def test_power():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
-    for (uwb1, uwb2) in combinations(modules, 2):
+    for (uwb1, uwb2) in itertools.permutations(modules, 2):
         neighbor_id = uwb2.get_id()["id"]
+        sleep(0.01)
         range_data = uwb1.do_twr(target_id=neighbor_id, only_range=False)
         assert range_data["Pr1"] != 0.0
         assert range_data["is_valid"]
@@ -275,4 +277,4 @@ def test_long_message():
 
 
 if __name__ == "__main__":
-    test_long_message()
+    test_passive_listening()
