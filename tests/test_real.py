@@ -276,5 +276,21 @@ def test_long_message():
         assert msgpack.unpackb(tracker.msg) == test_msg
 
 
+def test_discovery():
+    if len(modules) < 2:
+        pytest.skip("At least two modules need to be connected.")
+
+    # Get actual IDs of boards connected to this comp
+    tag_ids = [uwb.get_id()["id"] for uwb in modules]
+
+    for j, uwb in enumerate(modules):
+        my_id = tag_ids[j]
+        neighbor_ids = [i for i in tag_ids if i != my_id]
+        neighbor_ids.sort()
+        discovered_ids = uwb.do_discovery()
+
+        assert discovered_ids == neighbor_ids
+
+
 if __name__ == "__main__":
-    test_passive_listening()
+    test_discovery()

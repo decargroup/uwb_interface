@@ -546,6 +546,33 @@ class UwbModule(object):
             }
 
 
+    def do_discovery(self, possible_ids: List[int] = None) -> List[int]:
+        """
+        Discovers tags that are within UWB range by trying to range with every
+        single one. 
+
+        PARAMETERS
+        ----------
+        possible_ids (optional): IDs of the tags to try and range with
+
+        RETURNS
+        -------
+        list: list of tag IDs found
+        """
+
+        if possible_ids is None:
+            possible_ids = [i for i in range(0, 11)]
+
+        discovered = []
+        for test_id in possible_ids:
+            response = self.do_twr(target_id=test_id)
+            if response["is_valid"]:
+                discovered.append(test_id)
+
+        return discovered
+
+
+
     def get_max_frame_length(self):
         """
         Gets the module's ID.
