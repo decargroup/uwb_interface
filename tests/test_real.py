@@ -1,6 +1,6 @@
 from random import random
 from pyuwb.uwbmodule import UwbModule, find_uwb_serial_ports
-from itertools import combinations
+import itertools
 import pytest
 from time import sleep
 import msgpack
@@ -26,8 +26,9 @@ def test_twr():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
-    for (uwb1, uwb2) in combinations(modules, 2):
+    for (uwb1, uwb2) in itertools.permutations(modules, 2):
         neighbor_id = uwb2.get_id()["id"]
+        sleep(0.01)
         range_data = uwb1.do_twr(target_id=neighbor_id)
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
@@ -36,8 +37,9 @@ def test_power():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
-    for (uwb1, uwb2) in combinations(modules, 2):
+    for (uwb1, uwb2) in itertools.permutations(modules, 2):
         neighbor_id = uwb2.get_id()["id"]
+        sleep(0.01)
         range_data = uwb1.do_twr(target_id=neighbor_id, only_range=False)
         assert range_data["Pr1"] != 0.0
         assert range_data["is_valid"]
@@ -185,7 +187,7 @@ def test_firmware_tests():
 
 
 class MessageTracker:
-    def callback(self, msg, is_valid):
+    def callback(self, msg):
         self.msg = msg
 
 
@@ -226,11 +228,16 @@ def test_broadcast_msgpack():
         assert msgpack.unpackb(tracker.msg) == test_msg
 
 
+
+class LongMessageTracker:
+    def callback(self, msg, is_valid):
+        self.msg = msg
+
 def test_message_callback():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
-    trackers = [MessageTracker() for uwb in modules[1:]]
+    trackers = [LongMessageTracker() for uwb in modules[1:]]
 
     for i, uwb in enumerate(modules[1:]):
         uwb.register_message_callback(trackers[i].callback)
@@ -251,7 +258,7 @@ def test_long_message():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
-    trackers = [MessageTracker() for uwb in modules[1:]]
+    trackers = [LongMessageTracker() for uwb in modules[1:]]
 
     for i, uwb in enumerate(modules[1:]):
         uwb.register_message_callback(trackers[i].callback)
@@ -269,5 +276,21 @@ def test_long_message():
         assert msgpack.unpackb(tracker.msg) == test_msg
 
 
+def test_discovery():
+    if len(modules) < 2:
+        pytest.skip("At least two modules need to be connected.")
+
+    # Get actual IDs of boards connected to this comp
+    tag_ids = [uwb.get_id()["id"] for uwb in modules]
+
+    for j, uwb in enumerate(modules):
+        my_id = tag_ids[j]
+        neighbor_ids = [i for i in tag_ids if i != my_id]
+        neighbor_ids.sort()
+        discovered_ids = uwb.do_discovery()
+
+        assert discovered_ids == neighbor_ids
+
+
 if __name__ == "__main__":
-    test_long_message()
+    test_discovery()
