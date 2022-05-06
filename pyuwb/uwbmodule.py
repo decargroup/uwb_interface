@@ -1,13 +1,13 @@
 import struct
 import serial
 from serial.tools import list_ports
-from time import time, sleep
+from time import sleep
 from datetime import datetime
 import threading
 import queue
 import msgpack
 import traceback
-from typing import List, Any
+from typing import List
 from .packing import (
     Packer,
     IntField,
@@ -223,8 +223,11 @@ class UwbModule(object):
                 # Check if any callbacks are registered for this specific msg
                 if msg_key in self._callbacks.keys():
                     cb_list = self._callbacks[msg_key]
-                    for cb in cb_list:
-                        cb(*field_values)  # Execute the callback
+                    for cb, cb_args in cb_list:
+                        if cb_args is not None:
+                            cb(field_values, cb_args)
+                        else:
+                            cb(field_values)
 
     def _send(self, message: bytes):
         """
@@ -273,16 +276,16 @@ class UwbModule(object):
 
         self._kill_monitor = True       
 
-    def register_callback(self, msg_key: str, cb_function):
+    def register_callback(self, msg_key: str, cb_function, callback_args=None):
         """
         Registers a callback function to be executed whenever a specific
         message key is received over serial.
         """
         msg_key = msg_key.encode(self._encoding)
         if msg_key in self._callbacks.keys():
-            self._callbacks[msg_key].append(cb_function)
+            self._callbacks[msg_key].append((cb_function, callback_args))
         else:
-            self._callbacks[msg_key] = [cb_function]
+            self._callbacks[msg_key] = [(cb_function, callback_args)]
 
     def unregister_callback(self, msg_key: str, cb_function):
         """
@@ -291,8 +294,10 @@ class UwbModule(object):
         """
         msg_key = msg_key.encode(self._encoding)
         if msg_key in self._callbacks.keys():
-            if cb_function in self._callbacks[msg_key]:
-                self._callbacks[msg_key].remove(cb_function)
+            funcs = [x[0] for x in self._callbacks[msg_key]]
+            if cb_function in funcs:
+                idx = funcs.index(cb_function)
+                self._callbacks[msg_key].pop(idx)
             else:
                 print("This callback is not registered.")
         else:
@@ -467,6 +472,35 @@ class UwbModule(object):
         else:
             return True
 
+    def set_passive_listening(self, active=True):
+        """
+        Activiates/deactivates the passive listening or "eavesdropping" feature.
+
+        PARAMETERS:
+        -----------
+        active: bool
+            flag to turn on or off passive listening
+
+        RETURNS:
+        --------
+        bool: successfully received response
+        """
+        return self.toggle_passive(active)
+
+    def register_listening_callback(self, cb_function, callback_args = None):
+        """
+        Register a callback that will get called whenever a range message 
+        involving other tags is heard.
+        """
+        self.register_callback("S01", cb_function, callback_args)
+
+    def unregister_listening_callback(self, cb_function):
+        """
+        Unregister a previously-registered listening callback.
+        """
+        self.unregister_callback("S01", cb_function)
+
+
     def do_twr(
         self, target_id=1, meas_at_target=False, mult_twr=False, only_range=False
     ):
@@ -545,6 +579,18 @@ class UwbModule(object):
                 "is_valid": True,
             }
 
+    def register_range_callback(self, cb_function, callback_args = None):
+        """
+        Register a callback that gets executed whenever a module initiates
+        ranging with this one.
+        """
+        self.register_callback("S05", cb_function, callback_args)
+
+    def unregister_range_callback(self, cb_function):
+        """ 
+        Unregister a previously-registered ranging callback.
+        """
+        self.unregister_callback("S05", cb_function)
 
     def do_discovery(self, possible_ids: List[int] = None) -> List[int]:
         """
@@ -632,11 +678,19 @@ class UwbModule(object):
             return True
 
     def register_message_callback(self, cb_function):
+        """
+        Register a callback that gets called whenever a generic
+        non-ranging message is sent to this module.
+        """
+        # TODO: add callback_args
         receiver = LongMessageReceiver(cb_function)
         self._receivers[id(cb_function)] = receiver
         self.register_callback("S06", receiver.frame_callback)
         
     def unregister_message_callback(self, cb_function):
+        """
+        Unregister a previously-registered messaging callback.
+        """
         if not id(cb_function) in self._receivers.keys():
             print("This callback is not registered.")
 
