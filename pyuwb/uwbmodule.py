@@ -704,7 +704,7 @@ class LongMessageReceiver:
         self._exp_frames_remaining = None
 
     def frame_callback(self, msg):
-
+        msg = msg[0]
         # TODO: i believe the line below can be replaced with just msg[0] since
         # we are only using one byte for this. (no more than 256 frames).
         frames_remaining = struct.unpack("<B", msg[0:1])[0]
