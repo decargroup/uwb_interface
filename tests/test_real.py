@@ -187,7 +187,7 @@ def test_firmware_tests():
 
 
 class MessageTracker:
-    def callback(self, msg):
+    def callback(self, msg, is_valid):
         self.msg = msg
 
 
@@ -293,4 +293,4 @@ def test_discovery():
 
 
 if __name__ == "__main__":
-    test_discovery()
+    test_long_message()
