@@ -27,6 +27,7 @@ def test_twr():
         pytest.skip("At least two modules need to be connected.")
 
     for (uwb1, uwb2) in itertools.permutations(modules, 2):
+        sleep(0.01)
         neighbor_id = uwb2.get_id()["id"]
         sleep(0.01)
         range_data = uwb1.do_twr(target_id=neighbor_id)
@@ -38,6 +39,7 @@ def test_power():
         pytest.skip("At least two modules need to be connected.")
 
     for (uwb1, uwb2) in itertools.permutations(modules, 2):
+        sleep(0.01)
         neighbor_id = uwb2.get_id()["id"]
         sleep(0.01)
         range_data = uwb1.do_twr(target_id=neighbor_id, only_range=False)
@@ -119,9 +121,9 @@ def test_passive_listening():
     uwb3 = modules[2]
     neighbor_id = uwb2.get_id()["id"]
     tracker = DummyCallbackTracker()
-    uwb3.register_callback("S01", tracker.dummy_callback)
+    uwb3.register_listening_callback(tracker.dummy_callback)
 
-    uwb3.toggle_passive(toggle=True)
+    uwb3.set_passive_listening()
     sleep(0.1)
 
     N = 5
@@ -293,4 +295,4 @@ def test_discovery():
 
 
 if __name__ == "__main__":
-    test_long_message()
+    test_twr()
