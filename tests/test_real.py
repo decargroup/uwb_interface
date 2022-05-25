@@ -291,7 +291,7 @@ def test_discovery():
         neighbor_ids.sort()
         discovered_ids = uwb.do_discovery()
 
-        assert discovered_ids == neighbor_ids
+        assert set(neighbor_ids) <= set(discovered_ids)
 
 
 if __name__ == "__main__":
