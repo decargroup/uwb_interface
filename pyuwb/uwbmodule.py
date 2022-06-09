@@ -139,65 +139,7 @@ class UwbModule(object):
                 # messages one last time before exiting. 
                 time_to_exit = True 
 
-            # This line here blocks for a short timeout using pyserial's 
-            # readline() and timeout functionality. Due to the presence of the
-            # timeout inside readline(), it still means we end up "polling" at
-            # a low frequency. 
-            out = self._read()
-
-            if len(out) > 0:
-
-                # Lock main thread while response is being parsed.
-                with self._response_condition:
-                    
-                    # Temporary variable will act as buffer that is progressively
-                    # "consumed" as the message is processed left-to-right.
-                    temp = out
-                    while len(temp) >=4:
-
-                        # Find soonest of "R" or "S" 
-                        next_r_idx = temp.find(b"R")
-                        next_s_idx = temp.find(b"S")
-                        if next_r_idx == -1 and next_s_idx == -1:
-                            next_msg_idx = -1 
-                        elif next_r_idx == -1:
-                            next_msg_idx = next_s_idx
-                        elif next_s_idx == -1:
-                            next_msg_idx = next_r_idx
-                        else:
-                            next_msg_idx = min(next_r_idx, next_s_idx)
-
-
-                        if next_msg_idx == -1:
-                            # No message start found, exit loop
-                            break
-                        else:
-                            # Go to next msg_idx
-                            temp = temp[next_msg_idx:]
-
-                            # Read first three characters, check if valid msg
-                            msg_key = temp[0:3]
-                            temp = temp[3:]
-                            if msg_key in self._r_format_dict:
-                                try:
-                                    field_values, end_idx = self.packer.unpack(
-                                        temp, self._r_format_dict[msg_key]
-                                    )
-                                    self._response_container[msg_key] = field_values
-
-                                    # Signal to main thread that a response is
-                                    # ready.
-                                    self._response_condition.notify()
-
-                                    # Send to callback dispatcher thread
-                                    self._msg_queue.put((msg_key, field_values))
-
-                                    # Go to end of message.
-                                    temp = temp[end_idx+1:]
-                                except Exception:
-                                    if self.verbose:
-                                        print("Message parsing error occured.")
-                                        print(traceback.format_exc())
+            self._read_and_unpack()
 
             if time_to_exit:
                 self._msg_queue.put(None) # Signals CB dispatcher to exit.
@@ -257,6 +199,67 @@ class UwbModule(object):
             print(str(out)[2:-1])
         return out
 
+    def _read_and_unpack(self):
+
+        # This line here blocks for a short timeout using pyserial's 
+        # readline() and timeout functionality. Due to the presence of the
+        # timeout inside readline(), it still means we end up "polling" at
+        # a low frequency. 
+        out = self._read()
+
+        if len(out) > 0:
+
+            # Temporary variable will act as buffer that is progressively
+            # "consumed" as the message is processed left-to-right.
+            temp = out
+            while len(temp) >=4:
+
+                # Find soonest of "R" or "S" 
+                next_r_idx = temp.find(b"R")
+                next_s_idx = temp.find(b"S")
+                if next_r_idx == -1 and next_s_idx == -1:
+                    next_msg_idx = -1 
+                elif next_r_idx == -1:
+                    next_msg_idx = next_s_idx
+                elif next_s_idx == -1:
+                    next_msg_idx = next_r_idx
+                else:
+                    next_msg_idx = min(next_r_idx, next_s_idx)
+
+
+                if next_msg_idx == -1:
+                    # No message start found, exit loop
+                    break
+                else:
+                    # Go to next msg_idx
+                    temp = temp[next_msg_idx:]
+
+                    # Read first three characters, check if valid msg
+                    msg_key = temp[0:3]
+                    temp = temp[3:]
+                    if msg_key in self._r_format_dict:
+                        try:
+                            field_values, end_idx = self.packer.unpack(
+                                temp, self._r_format_dict[msg_key]
+                            )
+
+                            # Lock main thread while response is being parsed.
+                            with self._response_condition:
+                                self._response_container[msg_key] = field_values
+
+                                # Signal to main thread that a response is
+                                # ready.
+                                self._response_condition.notify()
+
+                            # Send to callback dispatcher thread
+                            self._msg_queue.put((msg_key, field_values))
+
+                            # Go to end of message.
+                            temp = temp[end_idx+1:]
+                        except Exception:
+                            if self.verbose:
+                                print("Message parsing error occured.")
+                                print(traceback.format_exc())
                         
     def _create_log_file(self):
         # Current date and time for logging
@@ -339,11 +342,11 @@ class UwbModule(object):
     def _execute_command(self, command_key: str, response_key: str, *args):
         command_key = command_key.encode(self._encoding)
         response_key = response_key.encode(self._encoding)
+        msg = self.packer.pack(args, self._c_format_dict[command_key])
+        msg = command_key + msg
+        self._send(msg)
         with self._response_condition:
             self._response_container[response_key] = None
-            msg = self.packer.pack(args, self._c_format_dict[command_key])
-            msg = command_key + msg
-            self._send(msg)
             self._response_condition.wait(self.timeout)
             response = self._response_container[response_key]
 
