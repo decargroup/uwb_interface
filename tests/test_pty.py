@@ -40,7 +40,7 @@ def test_read():
 def test_monitor_thread():
     device, client = pty.openpty()
     port = os.ttyname(client)
-    uwb = UwbModule(port, timeout=0.1, verbose=True, monitor=True)
+    uwb = UwbModule(port, timeout=0.1, verbose=True, threaded=True)
     my_string = "I'm a virtual uwb device\n"
     os.write(device, my_string.encode(uwb._encoding))
     sleep(1)
@@ -62,7 +62,7 @@ def test_get_id():
 def test_get_id_threaded():
     device, client = pty.openpty()
     port = os.ttyname(client)
-    uwb = UwbModule(port, timeout=1, verbose=True, monitor=True)
+    uwb = UwbModule(port, timeout=1, verbose=True, threaded=True)
     test_string = "R01|4\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.get_id()
@@ -181,7 +181,7 @@ def test_twr_callback():
     device, client = pty.openpty()
     port = os.ttyname(client)
     tracker = DummyCallbackTracker()
-    uwb = UwbModule(port, timeout=1, verbose=True, monitor=False)
+    uwb = UwbModule(port, timeout=1, verbose=True, threaded=False)
     uwb.register_callback("S05", tracker.dummy_callback)
     test_string = "S05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
@@ -192,7 +192,7 @@ def test_twr_callback_threaded():
     device, client = pty.openpty()
     port = os.ttyname(client)
     tracker = DummyCallbackTracker()
-    uwb = UwbModule(port, timeout=1, verbose=True, monitor=True)
+    uwb = UwbModule(port, timeout=1, verbose=True, threaded=True)
     uwb.register_callback("S05", tracker.dummy_callback)
     test_string = "S05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
@@ -204,7 +204,7 @@ def test_twr_callback_unregister():
     device, client = pty.openpty()
     port = os.ttyname(client)
     tracker = DummyCallbackTracker()
-    uwb = UwbModule(port, timeout=1, verbose=True, monitor=True)
+    uwb = UwbModule(port, timeout=1, verbose=True, threaded=True)
     uwb.register_callback("R05", tracker.dummy_callback)
     uwb.unregister_callback("R05", tracker.dummy_callback)
     test_string = "R05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"

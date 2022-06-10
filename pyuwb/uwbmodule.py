@@ -55,10 +55,9 @@ class UwbModule(object):
         if set to true, full serial output will be printed.
     log: bool
         TODO: get rid of logging?
-    monitor: bool
+    threaded: bool
         if true, initializes this module in a multi-threaded mode with  
-        background serial port monitoring
-
+        serial port monitoring and callback execution executing in other threads.
     """
 
     _encoding = "utf-8"
@@ -100,7 +99,7 @@ class UwbModule(object):
         timeout=0.1,
         verbose=False,
         log=False,
-        monitor=False,
+        threaded=False,
     ):
         """
         Constructor
@@ -130,7 +129,7 @@ class UwbModule(object):
         self._callbacks = {}
 
         # Start a separate thread for serial port monitoring
-        self._threaded = monitor
+        self._threaded = threaded
         if self._threaded:
             self._kill_monitor = False
             self._msg_queue = queue.Queue()
@@ -383,19 +382,21 @@ class UwbModule(object):
         This function will block for a max of `timeout` seconds. If left blank 
         or `timeout=None`, the default timeout will be used.
         """
-        if timeout is None:
-            timeout = self.timeout 
+        if not self._threaded:
+            
+            if timeout is None:
+                timeout = self.timeout 
 
-        old_timeout = self.timeout
-        self.device.timeout = timeout 
-        self._read_and_unpack()
+            old_timeout = self.timeout
+            self.device.timeout = timeout 
+            self._read_and_unpack()
 
-        # Execute any callbacks.
-        while len(self._msg_queue) > 0:
-            msg_key, field_values = self._msg_queue.pop(0)
-            self._execute_callbacks(msg_key, field_values)
+            # Execute any callbacks.
+            while len(self._msg_queue) > 0:
+                msg_key, field_values = self._msg_queue.pop(0)
+                self._execute_callbacks(msg_key, field_values)
 
-        self.device.timeout = old_timeout
+            self.device.timeout = old_timeout
 
 
     ############################################################################
