@@ -110,7 +110,7 @@ class Packer:
         # If no expected fields, return empty.
         results = []
         if field_types is None or len(field_types) == 0:
-            return results, msg.find(b'\r')
+            return results, msg.find(b"\r")
 
         # There will always be a separator character at the beginning.
         # Remove it.
@@ -134,11 +134,11 @@ class Packer:
             msg_end_idx += next_key_idx
 
         # If message format was good, we should always land on a '\r' at the end.
-        if og_msg[msg_end_idx] != b'\r'[0]:
+        if og_msg[msg_end_idx] != b"\r"[0]:
             RuntimeError("Error in message terminator detection.")
 
         return results, msg_end_idx
-    
+
     def get_next_key_char(self, msg: bytes):
         # Find the "soonest" key character (seperator or terminator)
         next_sep = msg.find(self._separator)

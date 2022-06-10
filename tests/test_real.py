@@ -4,6 +4,7 @@ import itertools
 import pytest
 from time import sleep
 import msgpack
+
 """ 
 These tests require a minimum of two modules physically connected
 to the computer.
@@ -33,6 +34,7 @@ def test_twr():
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
 
+
 def test_power():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
@@ -43,6 +45,7 @@ def test_power():
         range_data = uwb1.do_twr(target_id=neighbor_id, only_range=False)
         assert range_data["Pr1"] != 0.0
         assert range_data["is_valid"]
+
 
 def test_twr_meas_at_target():
     if len(modules) < 2:
@@ -109,6 +112,7 @@ def test_mult_twr_callback():
     sleep(0.1)
     assert tracker.num_called == N
 
+
 def test_passive_listening():
     if len(modules) < 3:
         pytest.skip("At least three modules need to be connected.")
@@ -143,7 +147,7 @@ def test_passive_listening():
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
-    assert tracker.num_called == 2*N
+    assert tracker.num_called == 2 * N
 
     for i in range(N):
         range_data = uwb1.do_twr(
@@ -153,7 +157,7 @@ def test_passive_listening():
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
-    assert tracker.num_called == 3*N
+    assert tracker.num_called == 3 * N
 
     for i in range(N):
         range_data = uwb1.do_twr(
@@ -163,7 +167,7 @@ def test_passive_listening():
         assert range_data["is_valid"]
         sleep(0.01)
     sleep(0.1)
-    assert tracker.num_called == 4*N
+    assert tracker.num_called == 4 * N
 
 
 def test_get_max_frame_len():
@@ -199,13 +203,14 @@ def test_broadcast():
 
     for i, uwb in enumerate(modules[1:]):
         uwb.register_message_callback(trackers[i].callback)
-        
-    test_msg = b'test\0\r\n|message'
+
+    test_msg = b"test\0\r\n|message"
     modules[0].broadcast(test_msg)
     sleep(0.2)
 
     for tracker in trackers:
         assert tracker.msg == test_msg
+
 
 def test_broadcast_msgpack():
     if len(modules) < 2:
@@ -217,9 +222,9 @@ def test_broadcast_msgpack():
         uwb.register_message_callback(trackers[i].callback)
 
     test_msg = {
-    "t": 3.14159,
-    "x":[1,2,3],
-    "P":[[1,0,0],[0,1,0],[0,0,1]],
+        "t": 3.14159,
+        "x": [1, 2, 3],
+        "P": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
     }
     data = msgpack.packb(test_msg)
     modules[0].broadcast(data)
@@ -228,10 +233,10 @@ def test_broadcast_msgpack():
         assert msgpack.unpackb(tracker.msg) == test_msg
 
 
-
 class LongMessageTracker:
     def callback(self, msg, is_valid):
         self.msg = msg
+
 
 def test_message_callback():
     if len(modules) < 2:
@@ -243,9 +248,9 @@ def test_message_callback():
         uwb.register_message_callback(trackers[i].callback)
 
     test_msg = {
-    "t": 3.14159,
-    "x":[1,2,3],
-    "P":[[1,0,0],[0,1,0],[0,0,1]],
+        "t": 3.14159,
+        "x": [1, 2, 3],
+        "P": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
     }
     data = msgpack.packb(test_msg)
     modules[0].broadcast(data)
@@ -263,11 +268,10 @@ def test_long_message():
     for i, uwb in enumerate(modules[1:]):
         uwb.register_message_callback(trackers[i].callback)
 
-
     test_msg = {
-    "t": 3.14159,
-    "x":[1.0]*15,
-    "P":[[random()]*i for i in range(1,15+1)],
+        "t": 3.14159,
+        "x": [1.0] * 15,
+        "P": [[random()] * i for i in range(1, 15 + 1)],
     }
     data = msgpack.packb(test_msg)
     modules[0].broadcast(data)
