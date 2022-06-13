@@ -384,11 +384,11 @@ class UwbModule(object):
         """
         if not self._threaded:
             
-            if timeout is None:
+            if timeout is not None:
                 timeout = self.timeout 
+                old_timeout = self.timeout
+                self.device.timeout = timeout 
 
-            old_timeout = self.timeout
-            self.device.timeout = timeout 
             self._read_and_unpack()
 
             # Execute any callbacks.
@@ -396,7 +396,9 @@ class UwbModule(object):
                 msg_key, field_values = self._msg_queue.pop(0)
                 self._execute_callbacks(msg_key, field_values)
 
-            self.device.timeout = old_timeout
+            # Restore old read timeout
+            if timeout is not None:
+                self.device.timeout = old_timeout
 
 
     ############################################################################
