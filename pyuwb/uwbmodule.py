@@ -234,9 +234,8 @@ class UwbModule(object):
             # Temporary variable will act as buffer that is progressively
             # "consumed" as the message is processed left-to-right.
             temp = out
-            while len(temp) >= 4:
-
-                temp += self.device.read(self.device.in_waiting)
+            while len(temp) >= 4: 
+                
                 # Find soonest of "R" or "S"
                 next_r_idx = temp.find(b"R")
                 next_s_idx = temp.find(b"S")
@@ -418,7 +417,12 @@ class UwbModule(object):
                 response = self._response_container[response_key]
         else:
             self._response_container[response_key] = None
-            self._read_and_unpack()
+
+            for _ in range(5):
+                self._read_and_unpack()
+                if self._response_container[response_key] is not None:
+                    break
+
             response = self._response_container[response_key]
 
             # Execute any callbacks.
