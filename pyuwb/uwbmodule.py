@@ -236,6 +236,7 @@ class UwbModule(object):
             temp = out
             while len(temp) >= 4:
 
+                temp += self.device.read(self.device.in_waiting)
                 # Find soonest of "R" or "S"
                 next_r_idx = temp.find(b"R")
                 next_s_idx = temp.find(b"S")
