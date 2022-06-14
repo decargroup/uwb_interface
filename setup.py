@@ -8,5 +8,5 @@ setup(
     author_email="charles.cossette@mail.mcgill.ca",
     license="MIT",
     packages=["pyuwb"],
-    install_requires=["pyserial","msgpack","pytest"],
+    install_requires=["pyserial", "msgpack", "pytest"],
 )

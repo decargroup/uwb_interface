@@ -1,5 +1,6 @@
 import time
 from pyuwb import UwbModule, find_uwb_serial_ports
+
 """
 This script publishes does ranging with a prespecified neighbour.
 """

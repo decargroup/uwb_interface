@@ -1,7 +1,7 @@
 import os, pty
 import sys
 from time import sleep
-import msgpack 
+import msgpack
 import struct
 
 sys.path.append(os.path.dirname(sys.path[0]))
@@ -40,7 +40,7 @@ def test_read():
 def test_monitor_thread():
     device, client = pty.openpty()
     port = os.ttyname(client)
-    uwb = UwbModule(port, timeout=0.1, verbose=True)
+    uwb = UwbModule(port, timeout=0.1, verbose=True, threaded=True)
     my_string = "I'm a virtual uwb device\n"
     os.write(device, my_string.encode(uwb._encoding))
     sleep(1)
@@ -50,6 +50,19 @@ def test_get_id():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
+    test_string = "R01|4\r\n"
+    os.write(device, test_string.encode(uwb._encoding))
+    response = uwb.get_id()
+    out = os.read(device, 1000)
+    assert out.decode(uwb._encoding) == "C01\r"
+    assert response["id"] == 4
+    assert response["is_valid"] == True
+
+
+def test_get_id_threaded():
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+    uwb = UwbModule(port, timeout=1, verbose=True, threaded=True)
     test_string = "R01|4\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.get_id()
@@ -85,6 +98,7 @@ def test_get_id_err2():
     response = uwb.get_id()
     assert response["id"] is None
     assert response["is_valid"] == False
+
 
 def test_get_id_no_response():
     """
@@ -155,7 +169,6 @@ we use a global variable to communicate this flag value between the callback
 thread and the main thread.
 """
 
-
 class DummyCallbackTracker:
     def __init__(self):
         self.entered_cb = False
@@ -168,7 +181,18 @@ def test_twr_callback():
     device, client = pty.openpty()
     port = os.ttyname(client)
     tracker = DummyCallbackTracker()
-    uwb = UwbModule(port, timeout=1, verbose=True)
+    uwb = UwbModule(port, timeout=1, verbose=True, threaded=False)
+    uwb.register_callback("S05", tracker.dummy_callback)
+    test_string = "S05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
+    os.write(device, test_string.encode(uwb._encoding))
+    uwb.wait_for_messages(0.1)
+    assert tracker.entered_cb == True
+
+def test_twr_callback_threaded():
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+    tracker = DummyCallbackTracker()
+    uwb = UwbModule(port, timeout=1, verbose=True, threaded=True)
     uwb.register_callback("S05", tracker.dummy_callback)
     test_string = "S05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
@@ -180,7 +204,7 @@ def test_twr_callback_unregister():
     device, client = pty.openpty()
     port = os.ttyname(client)
     tracker = DummyCallbackTracker()
-    uwb = UwbModule(port, timeout=1, verbose=True)
+    uwb = UwbModule(port, timeout=1, verbose=True, threaded=True)
     uwb.register_callback("R05", tracker.dummy_callback)
     uwb.unregister_callback("R05", tracker.dummy_callback)
     test_string = "R05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
@@ -206,7 +230,6 @@ def test_firmware_tests():
     assert data["parsing_test"] == True
 
 
-
 class MessageTracker:
     def callback(self, msg, is_valid):
         self.msg = msg
@@ -216,11 +239,10 @@ def test_long_message():
     device, client = pty.openpty()
     port = os.ttyname(client)
 
-
     test_msg = {
-    "t": 3.14159,
-    "x":[1.0]*5,
-    "P":[[1.0]*i for i in range(1,5+1)],
+        "t": 3.14159,
+        "x": [1.0] * 5,
+        "P": [[1.0] * i for i in range(1, 5 + 1)],
     }
     data = msgpack.packb(test_msg)
 
@@ -228,26 +250,26 @@ def test_long_message():
     tracker = MessageTracker()
     uwb = UwbModule(port, timeout=1, verbose=True)
     uwb.register_message_callback(tracker.callback)
-    uwb._max_frame_len = 100 
+    uwb._max_frame_len = 100
 
-
-    frame_len = max_frame_len - 20 
-    num_msg = int(len(data)/frame_len) + 1
-    frames = [data[i:i+frame_len] for i in range(0, len(data), frame_len)]
+    frame_len = max_frame_len - 20
+    num_msg = int(len(data) / frame_len) + 1
+    frames = [data[i : i + frame_len] for i in range(0, len(data), frame_len)]
 
     indexed_frames = []
     for i, frame in enumerate(frames):
         indexed_frames.append(struct.pack("<B", num_msg - i - 1) + frame)
 
-    responses = [b"S06|" + struct.pack("<H", len(frame)) + frame + b"\r\n" for frame in indexed_frames]
+    responses = [
+        b"S06|" + struct.pack("<H", len(frame)) + frame + b"\r\n"
+        for frame in indexed_frames
+    ]
     for response in responses:
         os.write(device, response)
-    
+
     uwb.broadcast(data)
     assert tracker.msg == data
 
 
-
-
 if __name__ == "__main__":
-    test_long_message()
+    test_twr_callback()
