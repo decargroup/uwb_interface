@@ -104,7 +104,7 @@ class UwbModule(object):
         """
         Constructor
         """
-        self.device = serial.Serial(port, baudrate=baudrate, timeout=0.1)
+        self.device = serial.Serial(port, baudrate=baudrate, timeout=timeout)
         self.verbose = verbose
         self.timeout = timeout
         self.logging = log
@@ -385,8 +385,7 @@ class UwbModule(object):
         if not self._threaded:
             
             if timeout is not None:
-                timeout = self.timeout 
-                old_timeout = self.timeout
+                old_timeout = self.device.timeout
                 self.device.timeout = timeout 
 
             self._read_and_unpack()
