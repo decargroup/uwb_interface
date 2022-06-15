@@ -234,8 +234,10 @@ class UwbModule(object):
             # Temporary variable will act as buffer that is progressively
             # "consumed" as the message is processed left-to-right.
             temp = out
-            while len(temp) >= 4: 
-                
+            counter = 0
+            while len(temp) >= 4 and counter < 100: 
+                counter += 1 # Failsafe
+
                 # Find soonest of "R" or "S"
                 next_r_idx = temp.find(b"R")
                 next_s_idx = temp.find(b"S")
@@ -265,7 +267,7 @@ class UwbModule(object):
                             )
 
                             if self._threaded:
-                                # Lock main thread while response is being parsed.
+                                # Lock main thread while response loaded.
                                 with self._response_condition:
                                     self._response_container[msg_key] = field_values
 
@@ -288,6 +290,8 @@ class UwbModule(object):
                             if self.verbose:
                                 print("Message parsing error occured.")
                                 print(traceback.format_exc())
+
+                
 
     def _execute_callbacks(self, msg_key, field_values):
         # Check if any callbacks are registered for this specific msg
