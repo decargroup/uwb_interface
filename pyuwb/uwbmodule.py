@@ -84,11 +84,11 @@ class UwbModule(object):
             ByteField,
         ],
         "R04": [],
-        "R05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 2,
+        "R05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4 + 2 * [IntField],
         "R06": [],
         "R07": [IntField],
         "S01": [IntField] * 11 + [FloatField] * 5,
-        "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 2,
+        "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4 + 2 * [IntField],
         "S06": [ByteField],
     }
 
@@ -643,10 +643,18 @@ class UwbModule(object):
             rx3: float
                 timestamp of the reception time of signal 3 in
                 the initiator tag's clock
-            Pr1: float
-                the power at the target tag for the first signal
-            Pr2: float
-                the power at the initiator tag for the second signal
+            fpp1: float
+                the first path power at the target tag for the first signal
+            fpp2: float
+                the first path power at the initiator tag for the second signal
+            rxp1: float
+                the receive power at the target tag for the first signal
+            rxp2: float
+                the receive power at the initiator tag for the second signal
+            std1: uint16_t
+                the noise std at the target tag for the first signal
+            std2: uint16_t
+                the noise std at the initiator tag for the second signal
         """
         msg_key = "C05"
         rsp_key = "R05"
@@ -665,8 +673,12 @@ class UwbModule(object):
                 "rx2": response[5],
                 "tx3": response[6],
                 "rx3": response[7],
-                "Pr1": response[8],
-                "Pr2": response[9],
+                "fpp1": response[8],
+                "fpp2": response[9],
+                "rxp1": response[10],
+                "rxp2": response[11],
+                "std1": response[12],
+                "std2": response[13],
                 "is_valid": True,
             }
         else:
