@@ -87,7 +87,7 @@ class UwbModule(object):
         "R05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4 + 2 * [IntField],
         "R06": [],
         "R07": [IntField],
-        "S01": [IntField] * 11 + [FloatField] * 15,
+        "S01": [IntField] * 11 + [FloatField] * 6 + [IntField] * 3 + [FloatField] * 4 + [IntField] * 2,
         "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4 + 2 * [IntField],
         "S06": [ByteField],
     }
