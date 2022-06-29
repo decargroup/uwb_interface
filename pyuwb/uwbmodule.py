@@ -108,6 +108,8 @@ class UwbModule(object):
         self.verbose = verbose
         self.timeout = timeout
         self.logging = log
+        self._threaded = threaded
+        self.id = ""
 
         self._r_format_dict = {
             key.encode(self._encoding): val
@@ -129,7 +131,6 @@ class UwbModule(object):
         self._callbacks = {}
 
         # Start a separate thread for serial port monitoring
-        self._threaded = threaded
         if self._threaded:
             self._kill_monitor = False
             self._msg_queue = queue.Queue()
@@ -148,6 +149,8 @@ class UwbModule(object):
             self._dispatcher_thread.start()
         else: 
             self._msg_queue = []
+
+        self.id = self.get_id()['id']
 
     def _serial_monitor(self):
         """
@@ -201,7 +204,7 @@ class UwbModule(object):
             )  
 
         if self.verbose:
-            print("<< ", end="")
+            print("{0} << ".format(self.id), end="")
             print(str(message)[2:-1])
 
         self.device.write(message)
@@ -219,7 +222,7 @@ class UwbModule(object):
         out += self.device.read(self.device.in_waiting)
 
         if self.verbose and len(out) > 0:
-            print(">> ", end="")
+            print("{0} >> ".format(self.id), end="")
             print(str(out)[2:-1])
         return out
 
