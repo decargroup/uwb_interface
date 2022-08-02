@@ -70,6 +70,7 @@ class UwbModule(object):
         "C05": [IntField, BoolField, BoolField],
         "C06": [ByteField],
         "C07": [],
+        "C08": [IntField],
     }
     _r_format_dict = {
         "R00": [],
@@ -87,6 +88,7 @@ class UwbModule(object):
         "R05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4 + 2 * [IntField],
         "R06": [],
         "R07": [IntField],
+        "R08": [],
         "S01": [IntField] * 11 + [FloatField] * 6 + [IntField] * 3 + [FloatField] * 4 + [IntField] * 2,
         "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4 + 2 * [IntField],
         "S06": [ByteField],
@@ -809,6 +811,27 @@ class UwbModule(object):
 
         receiver = self._receivers[id(cb_function)]
         self.unregister_callback("S06", receiver.frame_callback)
+
+    def set_response_delay(self, delay=1500):
+        """
+        Sets the tx3 response delay.
+
+        PARAMETERS:
+        -----------
+        delay: int
+            Length of delay in microseconds.
+
+        RETURNS:
+        --------
+        bool: successfully received response
+        """
+        msg_key = "C08"
+        rsp_key = "R08"
+        response = self._execute_command(msg_key, rsp_key, delay)
+        if response is None:
+            return False
+        else:
+            return True
 
 
 class LongMessageReceiver:
