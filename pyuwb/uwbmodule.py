@@ -1,7 +1,7 @@
 import struct
 import serial
 from serial.tools import list_ports
-from time import sleep
+import time
 from datetime import datetime
 import threading
 import queue
@@ -35,7 +35,7 @@ def find_uwb_serial_ports():
         if id_dict["is_valid"]:
             uwb_ports.append(port.device)
         uwb.close()
-    sleep(1)
+    time.sleep(1)
     return uwb_ports
 
 
@@ -104,7 +104,7 @@ class UwbModule(object):
         """
         Constructor
         """
-        self.device = serial.Serial(port, baudrate=baudrate, timeout=0.1)
+        self.device = serial.Serial(port, baudrate=baudrate, timeout=timeout)
         self.verbose = verbose
         self.timeout = timeout
         self.logging = log
@@ -234,7 +234,9 @@ class UwbModule(object):
             # Temporary variable will act as buffer that is progressively
             # "consumed" as the message is processed left-to-right.
             temp = out
-            while len(temp) >= 4:
+            counter = 0
+            while len(temp) >= 4 and counter < 100: 
+                counter += 1 # Failsafe
 
                 # Find soonest of "R" or "S"
                 next_r_idx = temp.find(b"R")
@@ -265,7 +267,7 @@ class UwbModule(object):
                             )
 
                             if self._threaded:
-                                # Lock main thread while response is being parsed.
+                                # Lock main thread while response loaded.
                                 with self._response_condition:
                                     self._response_container[msg_key] = field_values
 
@@ -288,6 +290,8 @@ class UwbModule(object):
                             if self.verbose:
                                 print("Message parsing error occured.")
                                 print(traceback.format_exc())
+
+                
 
     def _execute_callbacks(self, msg_key, field_values):
         # Check if any callbacks are registered for this specific msg
@@ -385,8 +389,7 @@ class UwbModule(object):
         if not self._threaded:
             
             if timeout is not None:
-                timeout = self.timeout 
-                old_timeout = self.timeout
+                old_timeout = self.device.timeout
                 self.device.timeout = timeout 
 
             self._read_and_unpack()
@@ -405,6 +408,13 @@ class UwbModule(object):
     ########################## COMMAND IMPLEMENTATIONS #########################
     ############################################################################
     def _execute_command(self, command_key: str, response_key: str, *args):
+        """
+        Executes an arbitrary command by command_key, and collects the response
+        based on response_key. 
+
+        Field values are passed as extra positional *args, which will be added
+        to the message string that is sent to the firmware.
+        """
         command_key = command_key.encode(self._encoding)
         response_key = response_key.encode(self._encoding)
         msg = self.packer.pack(args, self._c_format_dict[command_key])
@@ -418,8 +428,13 @@ class UwbModule(object):
                 response = self._response_container[response_key]
         else:
             self._response_container[response_key] = None
-            self._read_and_unpack()
-            response = self._response_container[response_key]
+
+            start_time = time.time()
+            while (time.time() - start_time) < self.timeout:
+                self._read_and_unpack()
+                response = self._response_container[response_key]
+                if response is not None:
+                    break
 
             # Execute any callbacks.
             while len(self._msg_queue) > 0:
