@@ -85,12 +85,12 @@ class UwbModule(object):
             ByteField,
         ],
         "R04": [],
-        "R05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4 + 2 * [IntField],
+        "R05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4 + 2 * [IntField] + 2 * [FloatField],
         "R06": [],
         "R07": [IntField],
         "R08": [],
         "S01": [IntField] * 11 + [FloatField] * 6 + [IntField] * 3 + [FloatField] * 4 + [IntField] * 2,
-        "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4 + 2 * [IntField],
+        "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4 + 2 * [IntField] + 2 * [FloatField],
         "S06": [ByteField],
     }
 
@@ -684,6 +684,8 @@ class UwbModule(object):
                 "rxp2": response[11],
                 "std1": response[12],
                 "std2": response[13],
+                "skew1": response[14],
+                "skew2": response[15],
                 "is_valid": True,
             }
         else:
