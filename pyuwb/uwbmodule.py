@@ -89,7 +89,7 @@ class UwbModule(object):
         "R06": [],
         "R07": [IntField],
         "R08": [],
-        "S01": [IntField] * 11 + [FloatField] * 6 + [IntField] * 3 + [FloatField] * 4 + [IntField] * 2,
+        "S01": [IntField] * 11 + [FloatField] * 6 + [FloatField] * 4,
         "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4,
         "S06": [ByteField],
     }
@@ -652,14 +652,10 @@ class UwbModule(object):
                 the first path power at the target tag for the first signal
             fpp2: float
                 the first path power at the initiator tag for the second signal
-            rxp1: float
-                the receive power at the target tag for the first signal
-            rxp2: float
-                the receive power at the initiator tag for the second signal
-            std1: uint16_t
-                the noise std at the target tag for the first signal
-            std2: uint16_t
-                the noise std at the initiator tag for the second signal
+            skew1: float
+                the skew measurement for the first signal
+            skew2: float
+                the skew measurement for the second signal
         """
         msg_key = "C05"
         rsp_key = "R05"
