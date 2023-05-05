@@ -70,6 +70,7 @@ class UwbModule(object):
         "C05": [IntField, BoolField, BoolField],
         "C06": [ByteField],
         "C07": [],
+        "C08": [IntField],
     }
     _r_format_dict = {
         "R00": [],
@@ -84,11 +85,12 @@ class UwbModule(object):
             ByteField,
         ],
         "R04": [],
-        "R05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 2,
+        "R05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4,
         "R06": [],
         "R07": [IntField],
-        "S01": [IntField] * 11 + [FloatField] * 5,
-        "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 2,
+        "R08": [],
+        "S01": [IntField] * 11 + [FloatField] * 6 + [FloatField] * 4,
+        "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4,
         "S06": [ByteField],
     }
 
@@ -108,6 +110,8 @@ class UwbModule(object):
         self.verbose = verbose
         self.timeout = timeout
         self.logging = log
+        self._threaded = threaded
+        self.id = ""
 
         self._r_format_dict = {
             key.encode(self._encoding): val
@@ -129,7 +133,6 @@ class UwbModule(object):
         self._callbacks = {}
 
         # Start a separate thread for serial port monitoring
-        self._threaded = threaded
         if self._threaded:
             self._kill_monitor = False
             self._msg_queue = queue.Queue()
@@ -148,6 +151,8 @@ class UwbModule(object):
             self._dispatcher_thread.start()
         else: 
             self._msg_queue = []
+
+        self.id = self.get_id()['id']
 
     def _serial_monitor(self):
         """
@@ -201,7 +206,7 @@ class UwbModule(object):
             )  
 
         if self.verbose:
-            print("<< ", end="")
+            print("{0} << ".format(self.id), end="")
             print(str(message)[2:-1])
 
         self.device.write(message)
@@ -219,7 +224,7 @@ class UwbModule(object):
         out += self.device.read(self.device.in_waiting)
 
         if self.verbose and len(out) > 0:
-            print(">> ", end="")
+            print("{0} >> ".format(self.id), end="")
             print(str(out)[2:-1])
         return out
 
@@ -643,10 +648,14 @@ class UwbModule(object):
             rx3: float
                 timestamp of the reception time of signal 3 in
                 the initiator tag's clock
-            Pr1: float
-                the power at the target tag for the first signal
-            Pr2: float
-                the power at the initiator tag for the second signal
+            fpp1: float
+                the first path power at the target tag for the first signal
+            fpp2: float
+                the first path power at the initiator tag for the second signal
+            skew1: float
+                the skew measurement for the first signal
+            skew2: float
+                the skew measurement for the second signal
         """
         msg_key = "C05"
         rsp_key = "R05"
@@ -665,8 +674,10 @@ class UwbModule(object):
                 "rx2": response[5],
                 "tx3": response[6],
                 "rx3": response[7],
-                "Pr1": response[8],
-                "Pr2": response[9],
+                "fpp1": response[8],
+                "fpp2": response[9],
+                "skew1": response[10],
+                "skew2": response[11],
                 "is_valid": True,
             }
         else:
@@ -794,6 +805,27 @@ class UwbModule(object):
 
         receiver = self._receivers[id(cb_function)]
         self.unregister_callback("S06", receiver.frame_callback)
+
+    def set_response_delay(self, delay=1500):
+        """
+        Sets the tx3 response delay.
+
+        PARAMETERS:
+        -----------
+        delay: int
+            Length of delay in microseconds.
+
+        RETURNS:
+        --------
+        bool: successfully received response
+        """
+        msg_key = "C08"
+        rsp_key = "R08"
+        response = self._execute_command(msg_key, rsp_key, delay)
+        if response is None:
+            return False
+        else:
+            return True
 
 
 class LongMessageReceiver:
