@@ -89,6 +89,7 @@ class UwbModule(object):
         "R06": [],
         "R07": [IntField],
         "R08": [],
+        "R10": [IntField] * 1016,
         "S01": [IntField] * 11 + [FloatField] * 6 + [FloatField] * 4,
         "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4,
         "S06": [ByteField],
@@ -605,6 +606,7 @@ class UwbModule(object):
         meas_at_target=False,
         mult_twr=False,
         only_range=False,
+        get_cir=False,
     ):
         """
         Performs Two-Way Ranging with a chosen target/destination tag.
@@ -620,6 +622,8 @@ class UwbModule(object):
         only_range: bool
             flag indicate if only range measurements should be output.
             NOTE: Does not get passed to the modules.
+        get_cir: bool
+            flag to indicate if the channel impulse response should be output. 
 
         RETURNS:
         --------
@@ -660,7 +664,7 @@ class UwbModule(object):
         msg_key = "C05"
         rsp_key = "R05"
         response = self._execute_command(
-            msg_key, rsp_key, target_id, meas_at_target, mult_twr
+            msg_key, rsp_key, target_id, meas_at_target, mult_twr, get_cir
         )
         if response is None:
             return {"neighbour": 0.0, "range": 0.0, "is_valid": False}
@@ -699,6 +703,19 @@ class UwbModule(object):
         Unregister a previously-registered ranging callback.
         """
         self.unregister_callback("S05", cb_function)
+
+    def register_cir_callback(self, cb_function, callback_args=None):
+        """
+        Register a callback that gets executed whenever a module initiates
+        ranging with this one.
+        """
+        self.register_callback("R10", cb_function, callback_args)
+
+    def unregister_cir_callback(self, cb_function):
+        """
+        Unregister a previously-registered ranging callback.
+        """
+        self.unregister_callback("R10", cb_function)
 
     def do_discovery(self, possible_ids: List[int] = None) -> List[int]:
         """

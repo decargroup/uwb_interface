@@ -140,12 +140,12 @@ class Packer:
         return results, msg_end_idx
 
     def get_next_key_char(self, msg: bytes):
-        # Find the "soonest" key character (seperator or terminator)
+        # Find the "soonest" key character (separator or terminator)
         next_sep = msg.find(self._separator)
         next_eol = msg.find(self._terminator)
         if next_sep == -1 and next_eol == -1:
             raise RuntimeError(
-                "No seperator or terminator detected in received message."
+                "No separator or terminator detected in received message."
             )
         elif next_sep == -1:
             next_key_idx = next_eol
