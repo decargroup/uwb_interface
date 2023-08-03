@@ -67,7 +67,7 @@ class UwbModule(object):
         "C02": [],
         "C03": [IntField, StringField, BoolField, FloatField, ByteField],
         "C04": [BoolField],
-        "C05": [IntField, BoolField, BoolField],
+        "C05": [IntField, BoolField, BoolField, BoolField],
         "C06": [ByteField],
         "C07": [],
         "C08": [IntField],
