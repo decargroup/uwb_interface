@@ -89,8 +89,8 @@ class UwbModule(object):
         "R06": [],
         "R07": [IntField],
         "R08": [],
-        "R10": [IntField] * 4 + [IntField] * 1016,
         "S01": [IntField] * 11 + [FloatField] * 6 + [FloatField] * 4,
+        "S10": [IntField] * 4 + [IntField] * 1016,
         "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4,
         "S06": [ByteField],
     }
@@ -706,16 +706,16 @@ class UwbModule(object):
 
     def register_cir_callback(self, cb_function, callback_args=None):
         """
-        Register a callback that gets executed whenever a module initiates
-        ranging with this one.
+        Register a callback that gets executed whenever a CIR message is
+        received.
         """
-        self.register_callback("R10", cb_function, callback_args)
+        self.register_callback("S10", cb_function, callback_args)
 
     def unregister_cir_callback(self, cb_function):
         """
-        Unregister a previously-registered ranging callback.
+        Unregister a previously-registered CIR callback.
         """
-        self.unregister_callback("R10", cb_function)
+        self.unregister_callback("S10", cb_function)
 
     def do_discovery(self, possible_ids: List[int] = None) -> List[int]:
         """
