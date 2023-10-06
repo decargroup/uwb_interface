@@ -604,7 +604,7 @@ class UwbModule(object):
         self,
         target_id=1,
         meas_at_target=False,
-        mult_twr=False,
+        ds_twr=False,
         only_range=False,
         get_cir=False,
     ):
@@ -617,8 +617,8 @@ class UwbModule(object):
             ID of the tag to range with
         meas_at_target: bool
             flag to have the range measurement also available at the target
-        mult_twr: bool
-            flag to indicate if the multiplicate TWR will be used
+        ds_twr: bool
+            flag to indicate if the DS-TWR will be used
         only_range: bool
             flag indicate if only range measurements should be output.
             NOTE: Does not get passed to the modules.
@@ -664,7 +664,7 @@ class UwbModule(object):
         msg_key = "C05"
         rsp_key = "R05"
         response = self._execute_command(
-            msg_key, rsp_key, target_id, meas_at_target, mult_twr, get_cir
+            msg_key, rsp_key, target_id, meas_at_target, ds_twr, get_cir
         )
         if response is None:
             return {"neighbour": 0.0, "range": 0.0, "is_valid": False}

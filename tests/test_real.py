@@ -84,7 +84,7 @@ def test_twr_callback():
     N = 10
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=True, mult_twr=False
+            target_id=neighbor_id, meas_at_target=True, ds_twr=False
         )
         assert range_data["is_valid"]
         sleep(0.01)
@@ -92,7 +92,7 @@ def test_twr_callback():
     assert tracker.num_called == N
 
 
-def test_mult_twr_callback():
+def test_ds_twr_callback():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
@@ -107,7 +107,7 @@ def test_mult_twr_callback():
     N = 10
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=True, mult_twr=True
+            target_id=neighbor_id, meas_at_target=True, ds_twr=True
         )
         assert range_data["is_valid"]
         sleep(0.01)
@@ -133,7 +133,7 @@ def test_passive_listening():
     N = 5
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=True, mult_twr=True
+            target_id=neighbor_id, meas_at_target=True, ds_twr=True
         )
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
@@ -143,7 +143,7 @@ def test_passive_listening():
 
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=False, mult_twr=True
+            target_id=neighbor_id, meas_at_target=False, ds_twr=True
         )
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
@@ -153,7 +153,7 @@ def test_passive_listening():
 
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=True, mult_twr=False
+            target_id=neighbor_id, meas_at_target=True, ds_twr=False
         )
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
@@ -163,7 +163,7 @@ def test_passive_listening():
 
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=False, mult_twr=False
+            target_id=neighbor_id, meas_at_target=False, ds_twr=False
         )
 
         assert range_data["is_valid"]
