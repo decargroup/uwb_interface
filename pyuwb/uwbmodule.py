@@ -90,9 +90,9 @@ class UwbModule(object):
         "R07": [IntField],
         "R08": [],
         "S01": [IntField] * 11 + [FloatField] * 6 + [FloatField] * 4,
-        "S10": [IntField] * 4 + [IntField] * 1016,
         "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4,
         "S06": [ByteField],
+        "S10": [IntField] * 4 + [IntField] * 1016,
     }
 
     def __init__(
@@ -744,7 +744,8 @@ class UwbModule(object):
 
     def get_max_frame_length(self):
         """
-        Gets the module's ID.
+        Get the max frame length in number of bytes that the board is configured
+        to send over UWB.
 
         RETURNS:
         --------
@@ -802,27 +803,7 @@ class UwbModule(object):
             return False
         else:
             return True
-
-    def register_message_callback(self, cb_function):
-        """
-        Register a callback that gets called whenever a generic
-        non-ranging message is sent to this module.
-        """
-        # TODO: add callback_args
-        receiver = LongMessageReceiver(cb_function)
-        self._receivers[id(cb_function)] = receiver
-        self.register_callback("S06", receiver.frame_callback)
-
-    def unregister_message_callback(self, cb_function):
-        """
-        Unregister a previously-registered messaging callback.
-        """
-        if not id(cb_function) in self._receivers.keys():
-            print("This callback is not registered.")
-
-        receiver = self._receivers[id(cb_function)]
-        self.unregister_callback("S06", receiver.frame_callback)
-
+        
     def set_response_delay(self, delay=1500):
         """
         Sets the tx3 response delay.
@@ -843,6 +824,26 @@ class UwbModule(object):
             return False
         else:
             return True
+
+    def register_message_callback(self, cb_function):
+        """
+        Register a callback that gets called whenever a generic
+        non-ranging message is sent to this module.
+        """
+        # TODO: add callback_args
+        receiver = LongMessageReceiver(cb_function)
+        self._receivers[id(cb_function)] = receiver
+        self.register_callback("S06", receiver.frame_callback)
+
+    def unregister_message_callback(self, cb_function):
+        """
+        Unregister a previously-registered messaging callback.
+        """
+        if not id(cb_function) in self._receivers.keys():
+            print("This callback is not registered.")
+
+        receiver = self._receivers[id(cb_function)]
+        self.unregister_callback("S06", receiver.frame_callback)
 
 
 class LongMessageReceiver:

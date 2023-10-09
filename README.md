@@ -4,7 +4,7 @@ This python package provides a basic API to UWB modules, allowing a user to init
 
 ## A simple example
 ```python 
-from pyuwb import UwbModule
+from pyuwb import UwbModule, find_uwb_serial_ports
 
 # Find all ports with a UWB module connected
 ports = find_uwb_serial_ports()
@@ -53,11 +53,13 @@ An empty response is essentially just an acknowledgement that the message was re
 https://docs.python.org/3/library/struct.html#format-characters. 
 
 
-## Current list of commands
+## Commands
 
-Note that all commands and responses are signed with a `Cxx` and `Rxx` prefix, respectively. The `xx` is the message ID, which is a two-digit number. A response to a specific command will have the same message ID as the command.
+We have a list of pre-programmed default commands. All commands and responses are signed with a `Cxx` and `Rxx` prefix, respectively. The `xx` is the message ID, which is a two-digit number. A response to a specific command will have the same message ID as the command. 
 
-|# | Python | Message| Response | Description|
+The supported commands are as follows.
+
+|ID | Python | Message| Response | Description|
 |--|--------|---------------------|------------------|-----------|
 |C00| `uwb.set_idle()`| `"C00\r"` | `"R00\r"` | Set the UWB module to idle mode
 |C01| `uwb.get_id()`| `"C01\r"`|`"R01,3\r"` | Get the ID of the UWB module
@@ -73,8 +75,33 @@ The above table shows a sample of the most basic functionality. Many of these co
 
 ## Callbacks and spontaneous messages
 
-In addition to the command/response style, the UWB module firmware can also send spontaneous messages to the PC without being commanded to do so. These messages are signed with a `Sxx` prefix. To handle these messages, we have a callback system, where a user can register a callback function to be called whenever a message with a specific message ID is received. The callback function will be called with the message fields as arguments. 
+In addition to the command/response style, the UWB module firmware can also send spontaneous messages to the PC without being commanded to do so. These messages are signed with a `Sxx` prefix. To handle these messages, we have a callback system, where a user can register a callback function to be called whenever a message with a specific message ID is received. The callback function will be called with the message fields as arguments.
 
+The supported spontaneous messages are as follows.
+
+|ID | Description|
+|--|--------|
+|S01| A message published by a passively-listening UWB module that was not participating in a TWR transaction.
+|S05| A message similar to R05, where the publisher is the non-initiating side of a TWR transaction. Usually means `uwb.do_twr()` was called with argument `meas_at_target` set to `True`.
+|S06| A generic non-ranging message was received. Usually means `uwb.broadcast()` was called.
+|S10| A channel impulse response (CIR) message was received. Usually means `uwb.do_twr()` was called with argument `get_cir` set to `True`. This message could be published by an initiating UWB module, a non-initiating UWB module, or a passively-listening UWB module.
+
+To assign a callback to a spontaneous message, we can use the `uwb.register_callback()` function. For example, to print the CIR measurement whenever a `S10` message is received, we can add the following code to our Python script.
+
+```python
+def cir_callback(data, my_id):
+    msg = {}
+    msg["from_id"] = data[0]
+    msg["to_id"] = data[1]
+    msg["idx"] = data[2] + data[3] / 1e3
+    msg["cir"] = data[4:]
+    print("CIR " + str(my_id), msg)
+
+uwb0.register_cir_callback("S10", cir_callback, id0['id'])
+uwb1.register_cir_callback("S10", cir_callback, id1['id'])
+```
+
+Note that we could have used the `uwb.register_cir_callback()` function instead, which is just a wrapper for `uwb.register_callback()` that automatically sets the message ID to `S10`.
 
 ## How it works internally
 
