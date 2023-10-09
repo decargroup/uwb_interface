@@ -57,15 +57,19 @@ https://docs.python.org/3/library/struct.html#format-characters.
 
 Note that all commands and responses are signed with a `Cxx` and `Rxx` prefix, respectively. The `xx` is the message ID, which is a two-digit number. A response to a specific command will have the same message ID as the command.
 
-|# | Example: Python | Example: message| Example: response|
-|--|--------|---------------------|------------------|
-|C00| `uwb.set_idle()`| `"C00\r"` | `"R00\r"` |
-|C01| `uwb.get_id()`| `"C01\r"`|`"R01,3\r"`
-|C02| `uwb.reset()`| `"C02\r"`| `"R02\r"`
-|C03| `uwb.do_tests()`| `"C03\r"`| `"R03,1\r"`
-|C04| `uwb.toggle_passive(toggle = 1)`| `"C04,1\r"`| `"R04\r"`
-|C05| `range_data = uwb.do_twr(target_id = 1)`| `"C05,1\r"`| `"R05,1.2345\r"`
+|# | Python | Message| Response | Description|
+|--|--------|---------------------|------------------|-----------|
+|C00| `uwb.set_idle()`| `"C00\r"` | `"R00\r"` | Set the UWB module to idle mode
+|C01| `uwb.get_id()`| `"C01\r"`|`"R01,3\r"` | Get the ID of the UWB module
+|C02| `uwb.reset()`| `"C02\r"`| `"R02\r"` | Reset the UWB module
+|C03| `uwb.do_tests()`| `"C03\r"`| `"R03,1\r"` | Run a series of tests
+|C04| `uwb.toggle_passive(toggle = 1)`| `"C04,1\r"`| `"R04\r"` | Toggle passive listening mode
+|C05| `uwb.do_twr(target_id = 1)`| `"C05,1\r"`| `"R05,1.2345\r"` | Initiate a TWR transaction
+|C06| `uwb.broadcast(b"example")`| `"C06,example\r"`| `"R06\r"` | Broadcast a message
+|C07| `uwb.get_max_frame_length()`| `"C07\r"`| `"R07,100\r"`| Get max frame length
+|C08| `uwb.set_response_delay(delay=1500)`| `"C08,1500\r"`| `"R08\r"`| Set delay for 2nd response in DS-TWR
 
+The above table shows a sample of the most basic functionality. Many of these commands have additional optional arguments that can be passed to customize the behavior for a wide variety of applications, and these arguments can modify the form of the message and response.
 
 ## Callbacks and spontaneous messages
 
