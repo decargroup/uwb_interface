@@ -103,19 +103,19 @@ uwb1.register_cir_callback("S10", cir_callback, id1['id'])
 
 Note that we could have used the `uwb.register_cir_callback()` function instead, which is just a wrapper for `uwb.register_callback()` that automatically sets the message ID to `S10`.
 
-## How it works internally
+## Backend architecture
 
-This interface is designed to allow a user to execute functions in the firmware by sending messages over USB. However, a second key feature is the ability to register callbacks, such that the UWB module firmware can send a "spontaneous" message without being commanded to do so, which can then be sent to a callback so the user can do what they want with the data. For these two features to coexist simultaneously, we had to divide the backend into three seperate threads. Three threads (which includes the main starting thread) are created a user creates a `UwbModule()` instance.
+For the message-sending and callback-triggering features to coexist simultaneously, we have divided the backend into three separate processes. Three processes (which includes the main starting process) are created whenever a user creates a `UwbModule()` instance.
 
-### Thread 1: Main Thread
-This is the same thread in which `UwbModule()` was instantiated, as well as where user-triggered commands such as `uwb.get_id()` are called.
+### Process 1: Main Process
+This is the same process in which `UwbModule()` is instantiated, as well as where user-triggered commands such as `uwb.get_id()` are called.
 
-### Thread 2: Serial monitor
-This is a thread that is constantly reading the USB serial output for messages from the firmware. It searches for recognized message prefixes such as `R01`. If one is detected, the message is parsed and the message fields are converted to their corresponding types. The parsed results and then sent to two places:
+### Process 2: Serial monitor
+This is a process that is constantly reading the USB serial output for messages from the firmware. It searches for recognized message prefixes such as `R01`. If one is detected, the message is parsed and the message fields are converted to their corresponding types. The parsed results are then sent to two places:
 
-1. A dictionary that holds the latest values for any specific message prefix. This is so that functions from the main thread can come collect their responses. 
+1. A dictionary that holds the latest values for any specific message prefix. This is so that functions from the main process can come collect their responses. 
 
-2. Added to a message queue, which is used to trigger callbacks as described by the next thread.
+2. Added to a message queue, which is used to trigger callbacks as described by the next process.
 
-### Thread 3: Callback dispatcher
-This thread continuously monitors the message queue described above, looping through any messages in the queue, executing callbacks registered for that message prefix. Hence, when a user experiences a callback call, it is inside a different thread (this one) than the main thread. Thread 3 and Thread 1 are user-facing threads, whereas Thread 2 is strictly internal. The reason Thread 3 and Thread 2 weren't merged into one thread was because callbacks could potentially taking a very long time to execute, which would block the serial reading. This way, the serial monitor can continue to operate even if a very long callback is running.
+### Process 3: Callback dispatcher
+This process continuously monitors the message queue described above, looping through any messages in the queue, executing callbacks registered for that message prefix. Hence, when a user experiences a callback call, it is inside a different process (this one) than the main process. Process 3 and Process 1 are user-facing processes, whereas Process 2 is strictly internal.

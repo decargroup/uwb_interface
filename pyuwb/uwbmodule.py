@@ -56,8 +56,9 @@ class UwbModule(object):
     log: bool
         TODO: get rid of logging?
     threaded: bool
-        if true, initializes this module in a multi-threaded mode with  
+        DEPRECATED. if true, initializes this module in a multi-threaded mode with  
         serial port monitoring and callback execution executing in other threads.
+        TODO: remove this option completely. 
     """
 
     _encoding = "utf-8"
