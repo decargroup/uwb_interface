@@ -21,6 +21,7 @@ def test_write():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port)
+    os.read(device, 1000)
     my_string = "Hello to the uwb device"
     uwb._send(my_string)
     out = os.read(device, 1000)
@@ -50,6 +51,7 @@ def test_get_id():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
+    os.read(device, 1000)
     test_string = "R01|4\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.get_id()
@@ -63,6 +65,7 @@ def test_get_id_threaded():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True, threaded=True)
+    os.read(device, 1000)
     test_string = "R01|4\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.get_id()
@@ -116,6 +119,7 @@ def test_get_id_multiple_response():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
+    os.read(device, 1000)
     test_string = "R05|0\r\nR01|32\r\nR00\r\nR02|1\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.get_id()
@@ -129,6 +133,7 @@ def test_get_max_frame_length():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
+    os.read(device, 1000)
     test_string = "R07|100\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.get_max_frame_length()
@@ -142,11 +147,12 @@ def test_do_twr():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
-    test_string = "R05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
+    os.read(device, 1000)
+    test_string = "R05|1|3.14159|0|0|0|0|0|0|0.0|0.0|0.0|0.0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     response = uwb.do_twr(target_id=1)
     out = os.read(device, 1000)
-    assert out.decode(uwb._encoding) == "C05|1|0|0\r"
+    assert out.decode(uwb._encoding) == "C05|1|0|0|0\r"
     assert response["range"] == 3.14159
     assert response["is_valid"] == True
 
@@ -182,19 +188,22 @@ def test_twr_callback():
     port = os.ttyname(client)
     tracker = DummyCallbackTracker()
     uwb = UwbModule(port, timeout=1, verbose=True, threaded=False)
+    os.read(device, 1000)
     uwb.register_callback("S05", tracker.dummy_callback)
-    test_string = "S05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
+    test_string = "S05|1|3.14159|0|0|0|0|0|0|0.0|0.0|0.0|0.0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     uwb.wait_for_messages(0.1)
     assert tracker.entered_cb == True
 
+#TODO: to be removed
 def test_twr_callback_threaded():
     device, client = pty.openpty()
     port = os.ttyname(client)
     tracker = DummyCallbackTracker()
     uwb = UwbModule(port, timeout=1, verbose=True, threaded=True)
+    os.read(device, 1000)
     uwb.register_callback("S05", tracker.dummy_callback)
-    test_string = "S05|1|3.14159|0|0|0|0|0|0|0.0|0.0\r\n"
+    test_string = "S05|1|3.14159|0|0|0|0|0|0|0.0|0.0|0.0|0.0\r\n"
     os.write(device, test_string.encode(uwb._encoding))
     sleep(0.1)
     assert tracker.entered_cb == True
