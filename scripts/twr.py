@@ -1,18 +1,27 @@
+# %%
 from pyuwb import UwbModule, find_uwb_serial_ports
 
-"""
-This script does ranging with a prespecified neighbour.
-"""
 ports = find_uwb_serial_ports()
+uwb1 = UwbModule(ports[1], verbose=False)
+uwb2 = UwbModule(ports[0], verbose=False)
 
-if len(ports) > 0:
-    uwb1 = UwbModule(ports[0], verbose=True)
-    counter = 0
-    while True:
-        range_data = uwb1.do_twr(target_id=6)
-        print(range_data)
-        print(counter)
-        counter += 1
+id1 = uwb1.get_id()
+id2 = uwb2.get_id()
 
-else:
-    print("Did not detect a UWB device on this machine.")
+while True:
+    data = uwb1.do_twr(
+        target_id = id2['id'],
+        ds_twr = True,
+        meas_at_target=True,
+    )
+    # uwb2.wait_for_messages()
+    print(data)
+
+    data = uwb2.do_twr(
+        target_id = id1['id'],
+        ds_twr = True,
+        meas_at_target=True,
+    )
+    # uwb1.wait_for_messages()
+    print(data)
+# %%
