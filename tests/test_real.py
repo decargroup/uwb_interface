@@ -45,7 +45,7 @@ def test_power():
         neighbor_id = uwb2.get_id()["id"]
         sleep(0.01)
         range_data = uwb1.do_twr(target_id=neighbor_id, only_range=False)
-        assert range_data["Pr1"] != 0.0
+        assert range_data["fpp1"] != 0.0
         assert range_data["is_valid"]
 
 
@@ -84,15 +84,15 @@ def test_twr_callback():
     N = 10
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=True, mult_twr=False
+            target_id=neighbor_id, meas_at_target=True, ds_twr=False
         )
         assert range_data["is_valid"]
-        sleep(0.01)
+        uwb2.wait_for_messages()
     sleep(0.1)
     assert tracker.num_called == N
 
 
-def test_mult_twr_callback():
+def test_ds_twr_callback():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
@@ -107,10 +107,10 @@ def test_mult_twr_callback():
     N = 10
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=True, mult_twr=True
+            target_id=neighbor_id, meas_at_target=True, ds_twr=True
         )
         assert range_data["is_valid"]
-        sleep(0.01)
+        uwb2.wait_for_messages()
     sleep(0.1)
     assert tracker.num_called == N
 
@@ -133,41 +133,42 @@ def test_passive_listening():
     N = 5
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=True, mult_twr=True
+            target_id=neighbor_id, meas_at_target=True, ds_twr=True
         )
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
-        sleep(0.01)
+        uwb3.wait_for_messages()
     sleep(0.1)
     assert tracker.num_called == N
 
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=False, mult_twr=True
+            target_id=neighbor_id, meas_at_target=False, ds_twr=True
         )
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
-        sleep(0.01)
+        uwb3.wait_for_messages()
     sleep(0.1)
     assert tracker.num_called == 2 * N
 
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=True, mult_twr=False
+            target_id=neighbor_id, meas_at_target=True, ds_twr=False
         )
         assert range_data["range"] != 0.0
         assert range_data["is_valid"]
+        uwb3.wait_for_messages()
         sleep(0.01)
     sleep(0.1)
     assert tracker.num_called == 3 * N
 
     for i in range(N):
         range_data = uwb1.do_twr(
-            target_id=neighbor_id, meas_at_target=False, mult_twr=False
+            target_id=neighbor_id, meas_at_target=False, ds_twr=False
         )
 
         assert range_data["is_valid"]
-        sleep(0.01)
+        uwb3.wait_for_messages()
     sleep(0.1)
     assert tracker.num_called == 4 * N
 
@@ -208,7 +209,9 @@ def test_broadcast():
 
     test_msg = b"test\0\r\n|message"
     modules[0].broadcast(test_msg)
-    sleep(0.2)
+    
+    for i, uwb in enumerate(modules[1:]):
+        uwb.wait_for_messages()
 
     for tracker in trackers:
         assert tracker.msg == test_msg
@@ -230,7 +233,10 @@ def test_broadcast_msgpack():
     }
     data = msgpack.packb(test_msg)
     modules[0].broadcast(data)
-    sleep(0.1)
+    
+    for i, uwb in enumerate(modules[1:]):
+        uwb.wait_for_messages()
+
     for tracker in trackers:
         assert msgpack.unpackb(tracker.msg) == test_msg
 
@@ -256,7 +262,10 @@ def test_message_callback():
     }
     data = msgpack.packb(test_msg)
     modules[0].broadcast(data)
-    sleep(0.1)
+    
+    for i, uwb in enumerate(modules[1:]):
+        uwb.wait_for_messages()
+
     for tracker in trackers:
         assert msgpack.unpackb(tracker.msg) == test_msg
 
@@ -277,7 +286,10 @@ def test_long_message():
     }
     data = msgpack.packb(test_msg)
     modules[0].broadcast(data)
-    sleep(0.1)
+    
+    for i, uwb in enumerate(modules[1:]):
+        uwb.wait_for_messages()
+
     for tracker in trackers:
         assert msgpack.unpackb(tracker.msg) == test_msg
 

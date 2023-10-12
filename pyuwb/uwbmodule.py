@@ -56,8 +56,9 @@ class UwbModule(object):
     log: bool
         TODO: get rid of logging?
     threaded: bool
-        if true, initializes this module in a multi-threaded mode with  
+        DEPRECATED. if true, initializes this module in a multi-threaded mode with  
         serial port monitoring and callback execution executing in other threads.
+        TODO: remove this option completely. 
     """
 
     _encoding = "utf-8"
@@ -90,9 +91,9 @@ class UwbModule(object):
         "R07": [IntField],
         "R08": [],
         "S01": [IntField] * 11 + [FloatField] * 6 + [FloatField] * 4,
-        "S10": [IntField] * 4 + [IntField] * 1016,
         "S05": [IntField, FloatField] + [IntField] * 6 + [FloatField] * 4,
         "S06": [ByteField],
+        "S10": [IntField] * 4 + [IntField] * 1016,
     }
 
     def __init__(
@@ -574,7 +575,7 @@ class UwbModule(object):
 
     def set_passive_listening(self, active=True):
         """
-        Activiates/deactivates the passive listening or "eavesdropping" feature.
+        Activates/deactivates the passive listening or "eavesdropping" feature.
 
         PARAMETERS:
         -----------
@@ -604,7 +605,7 @@ class UwbModule(object):
         self,
         target_id=1,
         meas_at_target=False,
-        mult_twr=False,
+        ds_twr=False,
         only_range=False,
         get_cir=False,
     ):
@@ -617,8 +618,8 @@ class UwbModule(object):
             ID of the tag to range with
         meas_at_target: bool
             flag to have the range measurement also available at the target
-        mult_twr: bool
-            flag to indicate if the multiplicate TWR will be used
+        ds_twr: bool
+            flag to indicate if the DS-TWR will be used
         only_range: bool
             flag indicate if only range measurements should be output.
             NOTE: Does not get passed to the modules.
@@ -664,7 +665,7 @@ class UwbModule(object):
         msg_key = "C05"
         rsp_key = "R05"
         response = self._execute_command(
-            msg_key, rsp_key, target_id, meas_at_target, mult_twr, get_cir
+            msg_key, rsp_key, target_id, meas_at_target, ds_twr, get_cir
         )
         if response is None:
             return {"neighbour": 0.0, "range": 0.0, "is_valid": False}
@@ -744,7 +745,8 @@ class UwbModule(object):
 
     def get_max_frame_length(self):
         """
-        Gets the module's ID.
+        Get the max frame length in number of bytes that the board is configured
+        to send over UWB.
 
         RETURNS:
         --------
@@ -802,27 +804,7 @@ class UwbModule(object):
             return False
         else:
             return True
-
-    def register_message_callback(self, cb_function):
-        """
-        Register a callback that gets called whenever a generic
-        non-ranging message is sent to this module.
-        """
-        # TODO: add callback_args
-        receiver = LongMessageReceiver(cb_function)
-        self._receivers[id(cb_function)] = receiver
-        self.register_callback("S06", receiver.frame_callback)
-
-    def unregister_message_callback(self, cb_function):
-        """
-        Unregister a previously-registered messaging callback.
-        """
-        if not id(cb_function) in self._receivers.keys():
-            print("This callback is not registered.")
-
-        receiver = self._receivers[id(cb_function)]
-        self.unregister_callback("S06", receiver.frame_callback)
-
+        
     def set_response_delay(self, delay=1500):
         """
         Sets the tx3 response delay.
@@ -843,6 +825,26 @@ class UwbModule(object):
             return False
         else:
             return True
+
+    def register_message_callback(self, cb_function):
+        """
+        Register a callback that gets called whenever a generic
+        non-ranging message is sent to this module.
+        """
+        # TODO: add callback_args
+        receiver = LongMessageReceiver(cb_function)
+        self._receivers[id(cb_function)] = receiver
+        self.register_callback("S06", receiver.frame_callback)
+
+    def unregister_message_callback(self, cb_function):
+        """
+        Unregister a previously-registered messaging callback.
+        """
+        if not id(cb_function) in self._receivers.keys():
+            print("This callback is not registered.")
+
+        receiver = self._receivers[id(cb_function)]
+        self.unregister_callback("S06", receiver.frame_callback)
 
 
 class LongMessageReceiver:
