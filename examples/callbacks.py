@@ -1,75 +1,63 @@
-import time
+"""
+This script shows how to use callbacks to process data received by the UWB
+modules. It is intended to be used with at least two UWB modules. UWB 0 is 
+the initiator, and UWB 1 is the target.
+
+This script publishes messages continuously until terminated.
+"""
 from pyuwb import UwbModule, find_uwb_serial_ports
-"""
-This script publishes a message to the USB port continuously until terminated.
-"""
 
-uwb1 = UwbModule("/dev/ttyACM1", log=False, verbose=False)
-uwb2 = UwbModule("/dev/ttyACM2", log=False, verbose=False)
-uwb3 = UwbModule("/dev/ttyACM3", log=False, verbose=False)
+# Find all ports with a connected UWB module.
+ports = find_uwb_serial_ports()
 
-id1 = uwb1.get_id()
-uwb1.output(id1)
+# Create a UwbModule object for each module.
+uwb = [UwbModule(port, verbose=False) for port in ports]
 
-id2 = uwb2.get_id()
-uwb2.output(id2)
+# Get the ID of each module.
+ids = [u.get_id() for u in uwb]
 
-id3 = uwb3.get_id()
-uwb3.output(id3)
+# Print the IDs.
+for i in range(len(ids)):
+    print("UWB " + str(i) + " ID: " + str(ids[i]["id"]))
 
-uwb3.set_passive_listening()
+# Ranging callback. This will get called whenever a range measurement is
+# obtained by the second module when it is the target for a ranging transaction
+# initiated by the first module. 
+def cb_target(data, my_id):
+    if data[2] != 0: 
+        # Data is valid
+        msg = {}
+        msg["neighbour"] = data[0]
+        msg['range'] = data[1]
+        msg['tx1'] = data[2]
+        msg['rx1'] = data[3]
+        msg['tx2'] = data[4]
+        msg['rx2'] = data[5]
+        msg['tx3'] = data[6]
+        msg['rx3'] = data[7]
+        msg['fpp1'] = data[8]
+        msg['fpp2'] = data[9]
+        msg['skew1'] = data[10]
+        msg['skew2'] = data[11]
+        msg["is_valid"] = True
+        print("Measurement received at Tag ", my_id, ": ", msg)
 
-# Passive-listening callback.
-def cb_passive(data):
-    dict = {"initiator_id":data[0], "target_id":data[1],
-            "rx_ts1":data[2], "rx_ts2":data[3], "rx_ts3":data[4],
-            "tx_ts1_n":data[5], "rx_ts1_n":data[6],
-            "tx_ts2_n":data[7], "rx_ts2_n":data[8],
-            "tx_ts3_n":data[9], "rx_ts3_n":data[10],
-            "fpp1":data[11], "fpp2":data[12], "fpp3":data[13],
-            "rxp1":data[14], "rxp2":data[15], "rxp3":data[16],
-            "std1":data[17], "std2":data[18], "std3":data[19],
-            "fpp1_n":data[20], "fpp2_n":data[21],
-            "rxp1_n":data[22], "rxp2_n":data[23],
-            "std1_n":data[24], "std2_n":data[25]}
-    uwb3.output(dict)
+# Register the callback.
+uwb[1].register_range_callback(cb_target, ids[1]['id'])
 
-# Target measurement reading callback. 
-def cb_target(data):
-    dict = {"neighbour": data[0],
-            "range": data[1],
-            "tx1": data[2],
-            "rx1": data[3],
-            "tx2": data[4],
-            "rx2": data[5],
-            "tx3": data[6],
-            "rx3": data[7],
-            "fpp1": data[8],
-            "fpp2": data[9],
-            "rxp1": data[10],
-            "rxp2": data[11],
-            "std1": data[12],
-            "std2": data[13]}
-    uwb2.output(dict) 
-
-uwb3.register_listening_callback(cb_passive)
-uwb2.register_range_callback(cb_target)
-
+# Perform TWR ranging transaction between the first and second modules.
+# This only stops when the user presses Ctrl+C.
 counter = 0
 while True:
-    data1 = uwb1.do_twr(id2['id'],ds_twr=True,meas_at_target=True)
-    uwb1.output(data1)
-    # time.sleep(0.01)
+    data = uwb[0].do_twr(
+        ids[1]['id'], # Target ID
+        ds_twr=True, # Double-sided TWR
+        meas_at_target=True, # Make measurement available at target, not just initiator
+    )
+    print("Measurement received at Tag ", ids[0]['id'], ": ", data)
 
-    data2 = uwb2.do_twr(id3['id'],ds_twr=True,meas_at_target=True)
-    uwb2.output(data2) 
-    # time.sleep(0.01)
-
-    data3 = uwb3.do_twr(id1['id'],ds_twr=True,meas_at_target=True)
-    uwb2.output(data3) 
-    # time.sleep(0.01)
-
-    # uwb3.wait_for_messages()
+    # Read from the queue of spontaneous messages and process callbacks.
+    uwb[1].wait_for_messages()
 
     counter += 1
     print(counter)

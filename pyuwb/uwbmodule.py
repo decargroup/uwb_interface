@@ -575,7 +575,7 @@ class UwbModule(object):
 
     def set_passive_listening(self, active=True):
         """
-        Activiates/deactivates the passive listening or "eavesdropping" feature.
+        Activates/deactivates the passive listening or "eavesdropping" feature.
 
         PARAMETERS:
         -----------

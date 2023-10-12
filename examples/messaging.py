@@ -1,4 +1,3 @@
-import time
 from pyuwb import UwbModule, find_uwb_serial_ports
 import numpy as np
 import msgpack
