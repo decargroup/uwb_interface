@@ -6,8 +6,8 @@ from time import sleep
 import msgpack
 
 """ 
-These tests require a minimum of two modules physically connected
-to the computer.
+Most of these tests require a minimum of two modules physically
+connected to the computer, with some requiring three.
 """
 
 ports = find_uwb_serial_ports()
@@ -23,6 +23,16 @@ def test_get_id():
         assert data["is_valid"]
 
 
+def test_firmware_tests():
+    if len(modules) < 1:
+        pytest.skip("At least one module needs to be connected.")
+
+    for uwb in modules:
+        data = uwb.do_tests()
+        assert data["is_valid"]
+        assert data["parsing_test"] == True
+
+
 def test_twr():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
@@ -31,12 +41,70 @@ def test_twr():
         sleep(0.01)
         neighbor_id = uwb2.get_id()["id"]
         sleep(0.01)
-        range_data = uwb1.do_twr(target_id=neighbor_id)
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id,
+            meas_at_target=False,
+            ds_twr=False,
+        )
+        assert range_data["neighbour"] == neighbor_id
         assert range_data["range"] != 0.0
+        assert range_data["tx1"] != 0.0
+        assert range_data["fpp1"] != 0.0
+        assert range_data["skew1"] != 0.0
+        assert range_data["is_valid"]
+
+    for (uwb1, uwb2) in itertools.permutations(modules, 2):
+        sleep(0.01)
+        neighbor_id = uwb2.get_id()["id"]
+        sleep(0.01)
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id,
+            meas_at_target=True,
+            ds_twr=False,
+        )
+        assert range_data["neighbour"] == neighbor_id
+        assert range_data["range"] != 0.0
+        assert range_data["tx1"] != 0.0
+        assert range_data["fpp1"] != 0.0
+        assert range_data["skew1"] != 0.0
+        assert range_data["is_valid"]
+
+    for (uwb1, uwb2) in itertools.permutations(modules, 2):
+        sleep(0.01)
+        neighbor_id = uwb2.get_id()["id"]
+        sleep(0.01)
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id,
+            meas_at_target=False,
+            ds_twr=True,
+            get_cir=True,
+        )
+        assert range_data["neighbour"] == neighbor_id
+        assert range_data["range"] != 0.0
+        assert range_data["tx1"] != 0.0
+        assert range_data["fpp1"] != 0.0
+        assert range_data["skew1"] != 0.0
         assert range_data["is_valid"]
 
 
-def test_power():
+    for (uwb1, uwb2) in itertools.permutations(modules, 2):
+        sleep(0.01)
+        neighbor_id = uwb2.get_id()["id"]
+        sleep(0.01)
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id,
+            meas_at_target=True,
+            ds_twr=True,
+        )
+        assert range_data["neighbour"] == neighbor_id
+        assert range_data["range"] != 0.0
+        assert range_data["tx1"] != 0.0
+        assert range_data["fpp1"] != 0.0
+        assert range_data["skew1"] != 0.0
+        assert range_data["is_valid"]
+
+
+def test_twr_w_cir():
     if len(modules) < 2:
         pytest.skip("At least two modules need to be connected.")
 
@@ -44,21 +112,88 @@ def test_power():
         sleep(0.01)
         neighbor_id = uwb2.get_id()["id"]
         sleep(0.01)
-        range_data = uwb1.do_twr(target_id=neighbor_id, only_range=False)
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id,
+            meas_at_target=False,
+            ds_twr=False,
+            get_cir=True,
+        )
+        assert range_data["neighbour"] == neighbor_id
+        assert range_data["range"] != 0.0
+        assert range_data["tx1"] != 0.0
         assert range_data["fpp1"] != 0.0
+        assert range_data["skew1"] != 0.0
+        assert range_data["is_valid"]
+
+    for (uwb1, uwb2) in itertools.permutations(modules, 2):
+        sleep(0.01)
+        neighbor_id = uwb2.get_id()["id"]
+        sleep(0.01)
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id,
+            meas_at_target=True,
+            ds_twr=False,
+            get_cir=True,
+        )
+        assert range_data["neighbour"] == neighbor_id
+        assert range_data["range"] != 0.0
+        assert range_data["tx1"] != 0.0
+        assert range_data["fpp1"] != 0.0
+        assert range_data["skew1"] != 0.0
+        assert range_data["is_valid"]
+
+    for (uwb1, uwb2) in itertools.permutations(modules, 2):
+        sleep(0.01)
+        neighbor_id = uwb2.get_id()["id"]
+        sleep(0.01)
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id,
+            meas_at_target=False,
+            ds_twr=True,
+            get_cir=True,
+        )
+        assert range_data["neighbour"] == neighbor_id
+        assert range_data["range"] != 0.0
+        assert range_data["tx1"] != 0.0
+        assert range_data["fpp1"] != 0.0
+        assert range_data["skew1"] != 0.0
+        assert range_data["is_valid"]
+
+    for (uwb1, uwb2) in itertools.permutations(modules, 2):
+        sleep(0.01)
+        neighbor_id = uwb2.get_id()["id"]
+        sleep(0.01)
+        range_data = uwb1.do_twr(
+            target_id=neighbor_id,
+            meas_at_target=True,
+            ds_twr=True,
+            get_cir=True,
+        )
+        assert range_data["neighbour"] == neighbor_id
+        assert range_data["range"] != 0.0
+        assert range_data["tx1"] != 0.0
+        assert range_data["fpp1"] != 0.0
+        assert range_data["skew1"] != 0.0
         assert range_data["is_valid"]
 
 
-def test_twr_meas_at_target():
-    if len(modules) < 2:
-        pytest.skip("At least two modules need to be connected.")
+def test_get_max_frame_len():
+    if len(modules) < 1:
+        pytest.skip("At least one module needs to be connected.")
 
-    uwb1 = modules[0]
-    uwb2 = modules[1]
-    neighbor_id = uwb2.get_id()["id"]
-    range_data = uwb1.do_twr(target_id=neighbor_id, meas_at_target=True)
-    assert range_data["range"] != 0.0
-    assert range_data["is_valid"]
+    for uwb in modules:
+        data = uwb.get_max_frame_length()
+        print(data)
+        assert data["is_valid"]
+
+
+def test_set_response_delay():
+    if len(modules) < 1:
+        pytest.skip("At least one module needs to be connected.")
+
+    for uwb in modules:
+        data = uwb.set_response_delay()
+        assert data
 
 
 class DummyCallbackTracker(object):
@@ -131,7 +266,7 @@ def test_passive_listening():
     sleep(0.1)
 
     N = 5
-    for i in range(N):
+    for _ in range(N):
         range_data = uwb1.do_twr(
             target_id=neighbor_id, meas_at_target=True, ds_twr=True
         )
@@ -141,7 +276,7 @@ def test_passive_listening():
     sleep(0.1)
     assert tracker.num_called == N
 
-    for i in range(N):
+    for _ in range(N):
         range_data = uwb1.do_twr(
             target_id=neighbor_id, meas_at_target=False, ds_twr=True
         )
@@ -151,7 +286,7 @@ def test_passive_listening():
     sleep(0.1)
     assert tracker.num_called == 2 * N
 
-    for i in range(N):
+    for _ in range(N):
         range_data = uwb1.do_twr(
             target_id=neighbor_id, meas_at_target=True, ds_twr=False
         )
@@ -162,35 +297,38 @@ def test_passive_listening():
     sleep(0.1)
     assert tracker.num_called == 3 * N
 
-    for i in range(N):
+    for _ in range(N):
         range_data = uwb1.do_twr(
             target_id=neighbor_id, meas_at_target=False, ds_twr=False
         )
-
+        assert range_data["range"] != 0.0
         assert range_data["is_valid"]
         uwb3.wait_for_messages()
     sleep(0.1)
     assert tracker.num_called == 4 * N
 
 
-def test_get_max_frame_len():
-    if len(modules) < 1:
-        pytest.skip("At least one module needs to be connected.")
+def test_cir_callback():
+    if len(modules) < 2:
+        pytest.skip("At least two modules need to be connected.")
 
-    for uwb in modules:
-        data = uwb.get_max_frame_length()
-        print(data)
-        assert data["is_valid"]
+    uwb1 = modules[0]
+    uwb1.verbose = False
+    uwb2 = modules[1]
+    neighbor_id = uwb2.get_id()["id"]
+    tracker = DummyCallbackTracker()
+    uwb2.register_callback("S10", tracker.dummy_callback)
 
-
-def test_firmware_tests():
-    if len(modules) < 1:
-        pytest.skip("At least one module needs to be connected.")
-
-    for uwb in modules:
-        data = uwb.do_tests()
-        assert data["is_valid"]
-        assert data["parsing_test"] == True
+    range_data = uwb1.do_twr(
+        target_id=neighbor_id, 
+        meas_at_target=True, 
+        ds_twr=True,
+        get_cir=True,
+    )
+    assert range_data["is_valid"]
+    uwb2.wait_for_messages()
+    sleep(0.1)
+    assert tracker.num_called == 1
 
 
 class MessageTracker:
