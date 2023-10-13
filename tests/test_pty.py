@@ -47,6 +47,19 @@ def test_monitor_thread():
     sleep(1)
 
 
+def test_set_idle():
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+    uwb = UwbModule(port, timeout=1, verbose=True)
+    os.read(device, 1000)
+    test_string = "R00\r\n"
+    os.write(device, test_string.encode(uwb._encoding))
+    response = uwb.set_idle()
+    out = os.read(device, 1000)
+    assert out.decode(uwb._encoding) == "C00\r"
+    assert response == True
+
+
 def test_get_id():
     device, client = pty.openpty()
     port = os.ttyname(client)
@@ -61,6 +74,7 @@ def test_get_id():
     assert response["is_valid"] == True
 
 
+#TODO: to be removed
 def test_get_id_threaded():
     device, client = pty.openpty()
     port = os.ttyname(client)
@@ -129,18 +143,47 @@ def test_get_id_multiple_response():
     assert response["is_valid"] == True
 
 
-def test_get_max_frame_length():
+def test_reset():
     device, client = pty.openpty()
     port = os.ttyname(client)
     uwb = UwbModule(port, timeout=1, verbose=True)
     os.read(device, 1000)
-    test_string = "R07|100\r\n"
+    test_string = "R02\r\n"
     os.write(device, test_string.encode(uwb._encoding))
-    response = uwb.get_max_frame_length()
+    response = uwb.reset()
     out = os.read(device, 1000)
-    assert out.decode(uwb._encoding) == "C07\r"
-    assert response["length"] == 100
-    assert response["is_valid"] == True
+    assert out.decode(uwb._encoding) == "C02\r"
+    assert response == True
+
+
+def test_firmware_tests():
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+    test_string = (
+        b"R03|0|12345|the test string|1|1.2345|"
+        b"+\x00\x82\xa1a\xca@I\x0f\xd0\xa1b\x92\x93\xca?\x80\x00\x00\xca@\x00"
+        b"\x00\x00\xca@@\x00\x00\x93\xca@\x80\x00\x00\xca@\xa0\x00\x00\xca@"
+        b"\xc0\x00\x00\r\n"
+    )
+    uwb = UwbModule(port, timeout=10, verbose=True)
+    os.write(device, test_string)
+    data = uwb.do_tests()
+    sleep(0.1)
+    assert data["is_valid"]
+    assert data["parsing_test"] == True
+
+
+def test_toggle_passive():
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+    uwb = UwbModule(port, timeout=1, verbose=True)
+    os.read(device, 1000)
+    test_string = "R04\r\n"
+    os.write(device, test_string.encode(uwb._encoding))
+    response = uwb.toggle_passive(True)
+    out = os.read(device, 1000)
+    assert out.decode(uwb._encoding) == "C04|1\r"
+    assert response == True
 
 
 def test_do_twr():
@@ -166,6 +209,33 @@ def test_twr_err1():
     response = uwb.do_twr(target_id=1)
     assert response["range"] == 0.0
     assert response["is_valid"] == False
+
+
+def test_get_max_frame_length():
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+    uwb = UwbModule(port, timeout=1, verbose=True)
+    os.read(device, 1000)
+    test_string = "R07|100\r\n"
+    os.write(device, test_string.encode(uwb._encoding))
+    response = uwb.get_max_frame_length()
+    out = os.read(device, 1000)
+    assert out.decode(uwb._encoding) == "C07\r"
+    assert response["length"] == 100
+    assert response["is_valid"] == True
+
+
+def test_set_response_delay():
+    device, client = pty.openpty()
+    port = os.ttyname(client)
+    uwb = UwbModule(port, timeout=1, verbose=True)
+    os.read(device, 1000)
+    test_string = "R08\r\n"
+    os.write(device, test_string.encode(uwb._encoding))
+    response = uwb.set_response_delay(5000)
+    out = os.read(device, 1000)
+    assert out.decode(uwb._encoding) == "C08|5000\r"
+    assert response == True
 
 
 """
@@ -195,6 +265,7 @@ def test_twr_callback():
     uwb.wait_for_messages(0.1)
     assert tracker.entered_cb == True
 
+
 #TODO: to be removed
 def test_twr_callback_threaded():
     device, client = pty.openpty()
@@ -222,21 +293,17 @@ def test_twr_callback_unregister():
     assert tracker.entered_cb == False
 
 
-def test_firmware_tests():
+def test_cir_callback():
     device, client = pty.openpty()
     port = os.ttyname(client)
-    test_string = (
-        b"R03|0|12345|the test string|1|1.2345|"
-        b"+\x00\x82\xa1a\xca@I\x0f\xd0\xa1b\x92\x93\xca?\x80\x00\x00\xca@\x00"
-        b"\x00\x00\xca@@\x00\x00\x93\xca@\x80\x00\x00\xca@\xa0\x00\x00\xca@"
-        b"\xc0\x00\x00\r\n"
-    )
-    uwb = UwbModule(port, timeout=10, verbose=True)
-    os.write(device, test_string)
-    data = uwb.do_tests()
-    sleep(0.1)
-    assert data["is_valid"]
-    assert data["parsing_test"] == True
+    tracker = DummyCallbackTracker()
+    uwb = UwbModule(port, timeout=1, verbose=True)
+    os.read(device, 1000)
+    uwb.register_callback("S10", tracker.dummy_callback)
+    test_string = "S10|0|1|2|3|" + "0|"*1016 + "\r\n"
+    os.write(device, test_string.encode(uwb._encoding))
+    uwb.wait_for_messages(0.1)
+    assert tracker.entered_cb == True
 
 
 class MessageTracker:
