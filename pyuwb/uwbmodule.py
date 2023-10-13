@@ -552,7 +552,7 @@ class UwbModule(object):
                 "parsing_test": firmware_parsing_error,
             }
 
-    def toggle_passive(self, toggle=False):
+    def toggle_passive(self, toggle=True):
         """
         Toggles the passive listening or "eavesdropping" feature.
 
@@ -733,7 +733,7 @@ class UwbModule(object):
         """
 
         if possible_ids is None:
-            possible_ids = [i for i in range(0, 11)]
+            possible_ids = list(range(0, 11))
 
         discovered = []
         for test_id in possible_ids:
