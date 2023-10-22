@@ -26,7 +26,7 @@ print(range_data["range"])
 
 ## Installation
 
-Python 3.6 or greater is required. Clone this repo, and Iinside this repo's directory, execute 
+Python 3.6 or greater is required. Clone this repo, and inside this repo's directory, execute 
 
     pip3 install -e .
 
