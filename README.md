@@ -1,6 +1,6 @@
 # Python Interface to the MRASL/DECAR UWB Modules
 
-This python package provides a basic API to UWB modules, allowing a user to initiate and collect ranging data between devices, as well as data transfer and broadcast capabilities between UWB devices.
+This python package provides a basic API to UWB modules, allowing a user to initiate and collect ranging data between devices, as well as data transfer and broadcast capabilities between UWB devices. A 10-min introductory video on how to install and use this package can be found [here](https://drive.google.com/file/d/1dBpR-MVU6czhAfb76SBjOEdgTPCRo-Jp/view?usp=sharing).
 
 ## A simple example
 ```python 
